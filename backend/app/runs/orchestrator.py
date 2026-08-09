@@ -21,10 +21,16 @@ from sqlalchemy import select
 from app.ai.base import AiRequest
 from app.ai.factory import get_evaluator
 from app.ai.prompts import POLICY_VERSION, PROMPT_VERSION
+from app.connections.broker import ConnectionBroker
+from app.connections.devices import resolve_required_devices
+from app.connections.manager import ConnectionError as DeviceConnectionError
+from app.connections.manager import ConnectionManager
+from app.connections.transport import get_transport
 from app.core.config import get_settings
 from app.core.enums import ExecutionStatus, RunStatus
 from app.db.session import SessionLocal
 from app.environments.models import Environment
+from app.secrets.store import SecretStore
 from app.evaluation.verdict import final_verdict_for_test
 from app.git import service as git_service
 from app.git.fetch import fetch_revision
@@ -62,6 +68,7 @@ def _execute_run(run_id: str) -> None:
 
         source_root = _resolve_source(db, run, workspace)
 
+        values = _run_values(db, run)
         context_base = {
             "run_id": run_id,
             "suite_id": run.suite_id,
@@ -77,13 +84,44 @@ def _execute_run(run_id: str) -> None:
             select(TestRun).where(TestRun.run_id == run_id).order_by(TestRun.order_index)
         ).all()
 
-        for tr in test_runs:
-            _run_one_test(db, run, suite, source_root, workspace, tr, context_base, settings)
+        # Establish Run-owned device sessions and start the connection broker
+        # before any test runs; close them in cleanup (spec section 51).
+        manager = ConnectionManager(
+            transport=get_transport(),
+            command_timeout=settings.ssh_command_timeout_seconds,
+            reconnect_attempts=settings.ssh_reconnect_attempts,
+            context={"run_id": run_id},
+        )
+        broker = ConnectionBroker(manager)
+        try:
+            specs = resolve_required_devices(env, values) if env else []
+            if specs:
+                manager.establish(specs, secret_resolver=SecretStore(db).reveal)
+            broker.start()
+            broker_env = {
+                "DRIVETEST_BROKER_URL": broker.base_url or "",
+                "DRIVETEST_BROKER_TOKEN": broker.token,
+                "PYTHONPATH": settings.sdk_dir,
+            }
 
-        run.status = RunStatus.COMPLETED.value
-        run.finished_at = datetime.now(timezone.utc)
-        db.commit()
-        logger.info("run_completed run_id=%s", run_id)
+            for tr in test_runs:
+                _run_one_test(
+                    db, run, suite, source_root, workspace, tr, context_base, settings, broker_env
+                )
+
+            run.status = RunStatus.COMPLETED.value
+            run.finished_at = datetime.now(timezone.utc)
+            db.commit()
+            logger.info("run_completed run_id=%s", run_id)
+        except DeviceConnectionError:
+            logger.exception("run_connection_setup_failed run_id=%s", run_id)
+            _mark_tests_infra_error(db, test_runs)
+            run.status = RunStatus.FAILED.value
+            run.finished_at = datetime.now(timezone.utc)
+            db.commit()
+        finally:
+            broker.stop()
+            manager.close_all()
     except Exception:  # noqa: BLE001 - ensure run is marked failed, then re-log
         logger.exception("run_failed run_id=%s", run_id)
         db.rollback()
@@ -116,13 +154,15 @@ def _resolve_source(db, run: Run, workspace: Workspace) -> Path:
     return settings.definitions_path
 
 
-def _run_one_test(db, run, suite, source_root, workspace, tr: TestRun, context_base, settings) -> None:
+def _run_one_test(
+    db, run, suite, source_root, workspace, tr: TestRun, context_base, settings, broker_env
+) -> None:
     tr.execution_status = ExecutionStatus.RUNNING.value
     tr.started_at = datetime.now(timezone.utc)
     db.commit()
 
     test_dir = source_root / "suites" / run.suite_id / "tests" / tr.test_id
-    context = {**context_base, "test_id": tr.test_id, "values": run and _run_values(db, run)}
+    context = {**context_base, "test_id": tr.test_id, "values": _run_values(db, run)}
 
     outcome: ExecOutcome = execute_test(
         test_dir=test_dir,
@@ -131,6 +171,7 @@ def _run_one_test(db, run, suite, source_root, workspace, tr: TestRun, context_b
         results_dir=workspace.results,
         timeout_seconds=settings.test_timeout_seconds,
         max_capture_bytes=settings.max_capture_bytes,
+        extra_env=broker_env,
     )
 
     tr.execution_status = outcome.execution_status.value
@@ -232,6 +273,16 @@ def _run_values(db, run: Run) -> dict:
 
     inst = db.scalar(select(PrerequisiteInstance).where(PrerequisiteInstance.run_id == run.id))
     return dict(inst.values_json) if inst and inst.values_json else {}
+
+
+def _mark_tests_infra_error(db, test_runs: list[TestRun]) -> None:
+    """If connection setup fails, no test can run; record INFRA_ERROR (spec 8/51)."""
+    now = datetime.now(timezone.utc)
+    for tr in test_runs:
+        if tr.execution_status in (ExecutionStatus.PENDING.value, ExecutionStatus.RUNNING.value):
+            tr.execution_status = ExecutionStatus.INFRA_ERROR.value
+            tr.finished_at = now
+    db.commit()
 
 
 def _persist_logs(db, workspace: Workspace, tr: TestRun, outcome: ExecOutcome) -> None:

@@ -157,6 +157,7 @@ Changing Python dependencies requires `docker compose build backend`.
    from a real repository).
 5. Review & Run. Watch tests execute sequentially, then expand each to see its AI review
    and final verdict. With the default mock evaluator you will see:
+   - `device_facts` → uses the Run-owned device connection via ExecutionContext, final PASSED
    - `basic_pass` → test PASSED, AI PASSED, final PASSED
    - `ai_anomaly` → test PASSED, AI FAILED (anomaly), final FAILED (disagreement shown)
    - `ai_judged` → test null, AI PASSED, final PASSED
@@ -191,6 +192,27 @@ DRIVETEST_OPENAI_API_KEY=sk-...     # or DRIVETEST_ANTHROPIC_API_KEY=...
 
 The model name and prompt/policy versions are recorded with every evaluation for
 reproducibility.
+
+## Device connections
+
+SSH connections are owned by the Run, not by individual tests (spec §51). At the start of a
+Run, the Connection Manager establishes one persistent session per required device and starts
+a per-Run connection broker (localhost, token-authenticated). Tests never open SSH themselves
+and never see hosts or credentials — they use the `drivetest` ExecutionContext SDK, which the
+platform injects onto the test's `PYTHONPATH`:
+
+```python
+from drivetest import ExecutionContext
+
+ctx = ExecutionContext.from_env()
+output = ctx.device("dut").run("show version")
+ctx.device("dut").configure(["configure terminal", "interface ...", "end"])
+```
+
+Required devices are read from the Environment metadata (`devices: [{role, host | host_from_value, secret_reference}]`).
+The transport is pluggable: the default `simulated` transport runs offline with no devices;
+set `DRIVETEST_SSH_TRANSPORT=ssh` (and rebuild the backend image) to use real SSH via paramiko.
+Sessions are closed automatically at the end of the Run.
 
 ## Running tests
 

@@ -15,6 +15,7 @@ supported_platforms:
   - platform_b
 
 tests:
+  - device_facts
   - basic_pass
   - ai_anomaly
   - ai_judged

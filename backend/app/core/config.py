@@ -64,6 +64,18 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-3-5-sonnet-latest"
     anthropic_base_url: str = "https://api.anthropic.com/v1"
 
+    # SSH / device connections (spec section 51). Connections are owned by the Run
+    # and reused by all tests; tests never open SSH themselves.
+    ssh_transport: str = "simulated"  # simulated | ssh (paramiko)
+    ssh_default_username: str = "admin"
+    ssh_port: int = 22
+    ssh_connect_timeout_seconds: float = 15.0
+    ssh_command_timeout_seconds: float = 30.0
+    ssh_reconnect_attempts: int = 2  # bounded reconnect policy
+    # Directory containing the `drivetest` ExecutionContext SDK injected onto the
+    # test subprocess PYTHONPATH.
+    sdk_dir: str = "/app/sdk"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

@@ -791,6 +791,9 @@ Never execute test Python code inside the API process.
 
 Later, add Docker isolation if required.
 
+Tests do not open their own SSH connections. Device access is provided by the
+Run-owned Connection Manager via the ExecutionContext (see section 51).
+
 Runner responsibilities:
 
 - create execution context
@@ -2035,3 +2038,81 @@ The system must make one question easy to answer:
 > What happened in this test, why did the system decide this verdict, and can I trust/reproduce the result?
 
 Every architecture, UI, logging, Git, prerequisite, and AI decision should support that goal.
+
+---
+
+# 51. SSH connection lifecycle
+
+SSH connections are owned by the Run, not by individual tests.
+
+At the beginning of a Run, DriveTest creates a persistent connection for every
+required network device.
+
+All tests in the Suite reuse those connections.
+
+Tests MUST NOT create direct SSH connections themselves.
+
+Tests interact with devices only through the DriveTest Network API /
+ExecutionContext.
+
+The Connection Manager is responsible for:
+
+- connection establishment
+- authentication
+- keepalive
+- reconnect
+- command execution
+- configuration execution
+- command timeout
+- logging
+- credential masking
+- session health
+- closing sessions at the end of the Run
+
+Connection lifecycle:
+
+```text
+RUN START
+→ establish required sessions
+→ execute all Suite tests
+→ cleanup
+→ close sessions
+```
+
+A dropped connection may be automatically re-established according to a bounded
+reconnect policy.
+
+Credentials must never be exposed to test code.
+
+## 51.1 How this is implemented
+
+Because tests execute in isolated subprocesses (section 19), the Run-owned
+connections live in the DriveTest backend, and tests reach them through a small
+client rather than by opening sockets:
+
+```text
+Run start
+  → ConnectionManager establishes one session per required device
+  → a per-Run Connection Broker (localhost, token-authenticated) is started
+  → each test subprocess receives ONLY the broker URL, a per-Run token, and the
+    set of device roles (never hosts credentials)
+  → test code uses the ExecutionContext SDK:
+        from drivetest import ExecutionContext
+        ctx = ExecutionContext.from_env()
+        output = ctx.device("dut").run("show version")
+        ctx.device("dut").configure(["interface ...", "..."])
+  → the broker forwards role+command to the ConnectionManager, which uses the
+    persistent session and returns masked output
+Run cleanup
+  → broker stopped, all sessions closed
+```
+
+Required devices are resolved from the Environment's device metadata (role +
+host, or host taken from a prerequisite value) plus credentials referenced via
+secret references (section 14/17). The transport is pluggable: a real SSH
+transport (paramiko) for labs, and a simulated transport as the default for
+development/demo so the platform runs without live devices.
+
+Note: automatic prerequisite checks (section 15) run BEFORE a Run exists, so they
+perform their own lightweight reachability checks and are not part of this
+Run-owned connection lifecycle.

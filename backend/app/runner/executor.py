@@ -45,6 +45,7 @@ def execute_test(
     results_dir: Path,
     timeout_seconds: int,
     max_capture_bytes: int,
+    extra_env: dict[str, str] | None = None,
 ) -> ExecOutcome:
     test_script = test_dir / "test.py"
     if not test_script.exists():
@@ -70,6 +71,9 @@ def execute_test(
         "PATH": _safe_path(),
         "PYTHONUNBUFFERED": "1",
     }
+    # Broker URL/token and SDK path (spec section 51) — never credentials.
+    if extra_env:
+        env.update(extra_env)
 
     logger.info("test_start test_id=%s", test_id)
     try:

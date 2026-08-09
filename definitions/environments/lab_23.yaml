@@ -13,8 +13,13 @@ capabilities:
 
 metadata:
   traffic_generator: ixia
+  # Devices the Run connects to (spec section 51). 'host_from_value' pulls the
+  # host from a prerequisite field; a real lab would also set 'secret_reference'
+  # for credentials. The simulated transport (dev default) ignores host/creds.
   devices:
     - role: dut
       name: dut-1
+      host_from_value: dut_management_ip
     - role: mse
       name: mse-1
+      host: 10.10.1.30
