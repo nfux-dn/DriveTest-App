@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: drivetest
+      POSTGRES_PASSWORD: drivetest
+      POSTGRES_DB: drivetest
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivetest"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DRIVETEST_DATABASE_URL: postgresql+psycopg://drivetest:drivetest@db:5432/drivetest
+      DRIVETEST_SESSION_SECRET: ${DRIVETEST_SESSION_SECRET:-dev-insecure-session-secret-change-me}
+      DRIVETEST_SECRET_ENCRYPTION_KEY: ${DRIVETEST_SECRET_ENCRYPTION_KEY:-}
+      DRIVETEST_CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      DRIVETEST_DEFINITIONS_DIR: /app/definitions
+      DRIVETEST_WORKSPACES_DIR: /tmp/drivetest-workspaces
+      DRIVETEST_GITHUB_CLIENT_ID: ${DRIVETEST_GITHUB_CLIENT_ID:-}
+      DRIVETEST_GITHUB_CLIENT_SECRET: ${DRIVETEST_GITHUB_CLIENT_SECRET:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./definitions:/app/definitions
+
+  frontend:
+    image: node:20
+    working_dir: /app
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE: http://localhost:8000
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+
+volumes:
+  db_data:

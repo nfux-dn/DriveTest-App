@@ -1,0 +1,20 @@
+id: lab_23
+name: Lab 23 (PWHE)
+platform: platform_a
+system_type: pwhe
+software_version: "25.2"
+enabled: true
+
+capabilities:
+  - qos
+  - shaping
+  - mpls
+  - pwhe
+
+metadata:
+  traffic_generator: ixia
+  devices:
+    - role: dut
+      name: dut-1
+    - role: mse
+      name: mse-1

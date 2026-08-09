@@ -1,0 +1,68 @@
+id: demo_shaping_common
+version: 1
+
+sections:
+
+  - id: connectivity
+    title: Connectivity
+    fields:
+
+      - id: dut_management_ip
+        label: DUT Management IP
+        type: ip
+        required: true
+        description: Management IP address of the device under test.
+
+      - id: customer_port
+        label: Customer Port
+        type: interface
+        required: true
+        placeholder: ge800-31/0/17
+
+  - id: traffic
+    title: Traffic Generator
+    fields:
+
+      - id: traffic_generator
+        label: Traffic Generator
+        type: select
+        required: true
+        options:
+          - ixia
+          - spirent
+
+      - id: traffic_generator_ip
+        label: Traffic Generator IP
+        type: ip
+        required: true
+
+      - id: ixia_chassis_ip
+        label: Ixia Chassis IP
+        type: ip
+        required: true
+        description: Only required when the traffic generator is Ixia.
+        visible_when:
+          field: traffic_generator
+          equals: ixia
+
+  - id: physical
+    title: Physical Validation
+    fields:
+
+      - id: topology_verified
+        label: Physical topology verified
+        type: confirmation
+        required: true
+
+  - id: checks
+    title: Automatic Checks
+    fields:
+
+      - id: ssh_connectivity
+        label: Verify SSH connectivity to DUT
+        type: check
+        required: true
+        remediation: Ensure the DUT management IP is reachable and SSH is enabled.
+        check:
+          handler: ssh_connectivity
+          target: ${dut_management_ip}
