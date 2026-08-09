@@ -48,6 +48,22 @@ class Settings(BaseSettings):
     github_client_secret: str = ""
     github_oauth_callback: str = "http://localhost:8000/api/git/oauth/callback"
 
+    # AI evaluator (spec sections 6, 21-23). Provider is pluggable; "mock" is the
+    # offline default so dev/demo works without network or API keys.
+    ai_provider: str = "mock"  # mock | openai | anthropic
+    ai_max_retries: int = 2
+    ai_request_timeout_seconds: float = 60.0
+    # Max bytes of stdout/stderr excerpt included in an AI request (spec 21).
+    ai_max_log_excerpt_bytes: int = 8000
+
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: str = "https://api.openai.com/v1"
+
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-3-5-sonnet-latest"
+    anthropic_base_url: str = "https://api.anthropic.com/v1"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

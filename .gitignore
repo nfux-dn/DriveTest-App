@@ -1,21 +1,20 @@
-# Environment / secrets
+# Secrets and local env (spec section 37: no secrets in Git)
 .env
-*.local
+*.env
+!.env.example
 
 # Python
 __pycache__/
-*.py[cod]
-*.egg-info/
+*.pyc
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .venv/
 venv/
 
 # Node / frontend
 node_modules/
 dist/
+*.local
 
-# OS / editor
-.DS_Store
-*.swp
+# Runtime artifacts
+/backend/.workspaces/
+drivetest-workspaces/

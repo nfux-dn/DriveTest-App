@@ -16,7 +16,9 @@ import type {
   Repository,
   Run,
   RunDetail,
+  RunReport,
   Suite,
+  TestRunDetail,
   User,
   ValidateResponse,
 } from "./types";
@@ -180,5 +182,28 @@ export function useCreateRun() {
   return useMutation({
     mutationFn: (payload: CreateRunRequest) => api.post<Run>("/api/runs", payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
+  });
+}
+
+export function useRunReport(
+  runId: string | null,
+  poll: boolean,
+): UseQueryResult<RunReport> {
+  return useQuery({
+    queryKey: ["report", runId],
+    queryFn: () => api.get<RunReport>(`/api/runs/${runId}/report`),
+    enabled: !!runId,
+    refetchInterval: poll ? 2000 : false,
+  });
+}
+
+export function useTestRunDetail(
+  testRunId: string | null,
+  enabled: boolean,
+): UseQueryResult<TestRunDetail> {
+  return useQuery({
+    queryKey: ["test-run", testRunId],
+    queryFn: () => api.get<TestRunDetail>(`/api/test-runs/${testRunId}`),
+    enabled: enabled && !!testRunId,
   });
 }

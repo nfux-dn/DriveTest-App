@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.db.session import get_db
+from app.results import service as results_service
+from app.results.schemas import RunReport
 from app.runs import service
 from app.runs.schemas import CreateRunRequest, RunDetailOut, RunOut, TestRunOut
 
@@ -36,6 +38,11 @@ def list_run_tests(
     run_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)
 ) -> list[TestRunOut]:
     return service.list_run_tests(db, run_id)
+
+
+@router.get("/{run_id}/report", response_model=RunReport)
+def get_report(run_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> RunReport:
+    return results_service.build_report(db, run_id)
 
 
 @router.post("/{run_id}/cancel", response_model=RunOut)

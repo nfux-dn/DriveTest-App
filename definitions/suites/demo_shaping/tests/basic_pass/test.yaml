@@ -1,0 +1,5 @@
+id: basic_pass
+name: Basic shaping pass
+description: Validate that measured bandwidth stays within the configured shaping range.
+expected_behavior: Measured bandwidth should be at or below the configured rate, within a small tolerance.
+evaluation_instructions: Confirm the measured rate did not exceed the configured rate by more than 5%.

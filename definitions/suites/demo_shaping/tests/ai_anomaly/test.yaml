@@ -1,0 +1,5 @@
+id: ai_anomaly
+name: High priority queue shaping
+description: Validate shaping behavior under bursty high-priority traffic.
+expected_behavior: The shaper must enforce the configured ceiling even during bursts; no burst should exceed it.
+evaluation_instructions: Treat any burst events above the shaping ceiling as a failure even if the average rate is within range.

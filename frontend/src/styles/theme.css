@@ -254,6 +254,31 @@ pre {
   }
 }
 
+/* Export-friendly report view (spec Phase 10). */
+@media print {
+  aside,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .card {
+    border-color: #ccc;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+  .pill {
+    border: 1px solid #999;
+    color: #000 !important;
+  }
+}
+
 pre.terminal {
   background: #05060a;
   border: 1px solid var(--border);

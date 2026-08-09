@@ -164,6 +164,55 @@ export interface RunDetail extends Run {
   tests: TestRun[];
 }
 
+export interface AiEvidence {
+  source: string;
+  details: string;
+}
+
+export interface AiAnalysis {
+  observations?: string[];
+  anomalies?: string[];
+  evidence?: AiEvidence[];
+  likely_root_cause?: string | null;
+  recommended_next_step?: string | null;
+}
+
+export interface AiEvaluation {
+  model: string;
+  prompt_version: string;
+  policy_version: string;
+  ai_verdict: string;
+  confidence: number | null;
+  summary: string | null;
+  analysis: AiAnalysis;
+}
+
+export interface TestRunDetail extends TestRun {
+  ai: AiEvaluation | null;
+}
+
+export interface RunReport {
+  run_id: string;
+  suite_id: string;
+  environment_id: string;
+  user_id: string;
+  status: string;
+  repository: string | null;
+  branch: string | null;
+  commit_sha: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  total: number;
+  passed: number;
+  failed: number;
+  review_required: number;
+  script_error: number;
+  infra_error: number;
+  timeout: number;
+  other: number;
+  tests: TestRun[];
+}
+
 export interface CreateRunRequest {
   suite_id: string;
   environment_id: string;

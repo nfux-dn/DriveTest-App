@@ -9,16 +9,15 @@ from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.db.session import get_db
 from app.results import service
-from app.results.schemas import ArtifactOut
-from app.runs.schemas import TestRunOut
+from app.results.schemas import ArtifactOut, TestRunDetailOut
 
 router = APIRouter(prefix="/api/test-runs", tags=["results"])
 
 
-@router.get("/{test_run_id}", response_model=TestRunOut)
+@router.get("/{test_run_id}", response_model=TestRunDetailOut)
 def get_test_run(
     test_run_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)
-) -> TestRunOut:
+) -> TestRunDetailOut:
     return service.get_test_run(db, test_run_id)
 
 

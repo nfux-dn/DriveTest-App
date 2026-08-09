@@ -15,15 +15,20 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
 from sqlalchemy import select
 
+from app.ai.base import AiRequest
+from app.ai.factory import get_evaluator
+from app.ai.prompts import POLICY_VERSION, PROMPT_VERSION
 from app.core.config import get_settings
 from app.core.enums import ExecutionStatus, RunStatus
 from app.db.session import SessionLocal
 from app.environments.models import Environment
+from app.evaluation.verdict import final_verdict_for_test
 from app.git import service as git_service
 from app.git.fetch import fetch_revision
-from app.results.models import Artifact, TestRun
+from app.results.models import AiEvaluation, Artifact, TestRun
 from app.runner.executor import ExecOutcome, execute_test
 from app.runner.workspace import Workspace, create_workspace
 from app.runs.models import Run
@@ -135,13 +140,91 @@ def _run_one_test(db, run, suite, source_root, workspace, tr: TestRun, context_b
     db.commit()
 
     _persist_logs(db, workspace, tr, outcome)
+
+    # AI review runs for every successfully executed test (spec section 6). For
+    # non-COMPLETED executions AI does not produce a product verdict (spec 8).
+    if outcome.execution_status == ExecutionStatus.COMPLETED:
+        _evaluate_with_ai(db, run, test_dir, tr, outcome, settings)
+
     logger.info(
-        "test_stored run_id=%s test_id=%s status=%s verdict=%s",
+        "test_stored run_id=%s test_id=%s status=%s test_verdict=%s ai_verdict=%s final=%s",
         run.id,
         tr.test_id,
         tr.execution_status,
         tr.test_verdict,
+        tr.ai_verdict,
+        tr.final_verdict,
     )
+
+
+def _evaluate_with_ai(db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome, settings) -> None:
+    meta = _load_test_metadata(test_dir)
+    result = outcome.result_json or {}
+    env = db.get(Environment, run.environment_id)
+    limit = settings.ai_max_log_excerpt_bytes
+
+    request = AiRequest(
+        test_id=tr.test_id,
+        test_name=meta.get("name"),
+        description=meta.get("description"),
+        expected_behavior=meta.get("expected_behavior"),
+        evaluation_instructions=meta.get("evaluation_instructions"),
+        test_verdict=tr.test_verdict,
+        measurements=result.get("measurements", {}) or {},
+        observations=result.get("observations", []) or [],
+        evidence=result.get("evidence", []) or [],
+        artifacts=result.get("artifacts", []) or [],
+        stdout_excerpt=(outcome.stdout or "")[:limit] or None,
+        stderr_excerpt=(outcome.stderr or "")[:limit] or None,
+        platform=env.platform if env else None,
+        system_type=env.system_type if env else None,
+        software_version=env.software_version if env else None,
+    )
+
+    evaluator = get_evaluator(settings)
+    try:
+        ai_result = evaluator.evaluate(request)
+    except Exception:  # noqa: BLE001 - a failed AI review must not crash the run
+        logger.exception("ai_evaluation_failed run_id=%s test_id=%s", run.id, tr.test_id)
+        return
+
+    db.add(
+        AiEvaluation(
+            test_run_id=tr.id,
+            model=evaluator.model,
+            prompt_version=PROMPT_VERSION,
+            policy_version=POLICY_VERSION,
+            ai_verdict=ai_result.ai_verdict.value,
+            confidence=ai_result.confidence,
+            summary=ai_result.summary,
+            analysis_json={
+                "observations": ai_result.observations,
+                "anomalies": ai_result.anomalies,
+                "evidence": [e.model_dump() for e in ai_result.evidence],
+                "likely_root_cause": ai_result.likely_root_cause,
+                "recommended_next_step": ai_result.recommended_next_step,
+            },
+        )
+    )
+
+    tr.ai_verdict = ai_result.ai_verdict.value
+    tr.ai_confidence = ai_result.confidence
+    final = final_verdict_for_test(tr.execution_status, tr.test_verdict, tr.ai_verdict)
+    tr.final_verdict = final.value if final else None
+    db.commit()
+
+
+def _load_test_metadata(test_dir: Path) -> dict:
+    """Read optional test.yaml (definition + evaluation instructions, spec 21)."""
+    test_yaml = test_dir / "test.yaml"
+    if not test_yaml.exists():
+        return {}
+    try:
+        with test_yaml.open("r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        return data if isinstance(data, dict) else {}
+    except (OSError, yaml.YAMLError):
+        return {}
 
 
 def _run_values(db, run: Run) -> dict:
