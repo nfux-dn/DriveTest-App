@@ -205,14 +205,20 @@ platform injects onto the test's `PYTHONPATH`:
 from drivetest import ExecutionContext
 
 ctx = ExecutionContext.from_env()
-output = ctx.device("dut").run("show version")
-ctx.device("dut").configure(["configure terminal", "interface ...", "end"])
+dut = ctx.device("dut")
+dut.run("show interfaces description")               # read
+dut.configure(["interfaces", "  ge0", '    description "x"', "  !", "!"])  # stage candidate
+dut.commit()                                          # apply
+dut.rollback(1); dut.commit()                         # revert to previous committed config
 ```
 
-Required devices are read from the Environment metadata (`devices: [{role, host | host_from_value, secret_reference}]`).
-The transport is pluggable: the default `simulated` transport runs offline with no devices;
-set `DRIVETEST_SSH_TRANSPORT=ssh` (and rebuild the backend image) to use real SSH via paramiko.
-Sessions are closed automatically at the end of the Run.
+Sessions are **prerequisite-driven**: a prerequisite field marked `device_role` opens one
+session to the host the user enters (see `definitions/prerequisites/*/common.yaml`). The number
+of such fields determines how many sessions open; the operator picks the hostnames at run time.
+The transport is pluggable: the default `simulated` transport is a small stateful DNOS model
+(supports `show interfaces description`, `configure`/`commit`/`rollback`) so tests run and
+verify offline; set `DRIVETEST_SSH_TRANSPORT=ssh` (rebuild the backend image) to use a real
+persistent SSH shell via paramiko. Sessions are closed automatically at the end of the Run.
 
 ## Running tests
 

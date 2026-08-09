@@ -39,9 +39,32 @@ class Device:
         data = self._ctx._post("/exec", {"role": self._role, "command": command}, timeout)
         return data.get("output", "")
 
-    def configure(self, commands: list[str], timeout: float = 120.0) -> str:
-        """Apply a list of configuration commands on the device."""
-        data = self._ctx._post("/config", {"role": self._role, "commands": commands}, timeout)
+    def configure(self, commands: list[str], commit: bool = False, timeout: float = 120.0) -> str:
+        """Enter config mode and stage a candidate (spec section 51).
+
+        Sends `configure`, then each line, and optionally `commit`. Does not
+        commit unless commit=True; pair with commit() when you want to review or
+        run additional steps before applying.
+        """
+        lines = ["configure", *commands]
+        if commit:
+            lines.append("commit")
+        data = self._ctx._post("/config", {"role": self._role, "commands": lines}, timeout)
+        return data.get("output", "")
+
+    def commit(self, timeout: float = 120.0) -> str:
+        """Commit the staged candidate configuration."""
+        data = self._ctx._post("/exec", {"role": self._role, "command": "commit"}, timeout)
+        return data.get("output", "")
+
+    def rollback(self, rollback_id: int = 1, timeout: float = 120.0) -> str:
+        """Load a previous committed configuration (0=current, 1=previous, ...).
+
+        Follow with commit() to apply the rollback.
+        """
+        data = self._ctx._post(
+            "/exec", {"role": self._role, "command": f"rollback {int(rollback_id)}"}, timeout
+        )
         return data.get("output", "")
 
 

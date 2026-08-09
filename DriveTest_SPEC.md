@@ -490,7 +490,17 @@ visible_when
 check
 remediation
 sensitive
+device_role
+credential_ref
 ```
+
+`device_role` and `credential_ref` bind a field to a network device (section 51):
+a field carrying a device address (e.g. `type: ip`) may declare `device_role`
+(for example `dut`), which tells DriveTest to open one Run-owned SSH session to
+the host the user entered, addressable by that role. `credential_ref` names
+another field (a `secret_reference`) that holds the credential for that device.
+The number of filled, visible `device_role` fields determines how many sessions
+open for the Run.
 
 Supported field types for MVP:
 
@@ -2107,11 +2117,16 @@ Run cleanup
   → broker stopped, all sessions closed
 ```
 
-Required devices are resolved from the Environment's device metadata (role +
-host, or host taken from a prerequisite value) plus credentials referenced via
-secret references (section 14/17). The transport is pluggable: a real SSH
-transport (paramiko) for labs, and a simulated transport as the default for
-development/demo so the platform runs without live devices.
+Required devices are resolved from the Run's prerequisites, not from the
+Environment. Each prerequisite field that declares a `device_role` (section 11)
+opens one session to the host the user entered for that field; credentials come
+from the field's `credential_ref` (a secret reference, section 14/17) or a
+platform default. The suite's prerequisite structure therefore determines how
+many sessions open, and the operator chooses the hostnames at run time. The
+Environment is used only for compatibility (section 3), not to open sessions.
+The transport is pluggable: a real SSH transport (paramiko) for labs, and a
+simulated transport as the default for development/demo so the platform runs
+without live devices.
 
 Note: automatic prerequisite checks (section 15) run BEFORE a Run exists, so they
 perform their own lightweight reachability checks and are not part of this

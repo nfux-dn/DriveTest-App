@@ -12,6 +12,8 @@ sections:
         type: ip
         required: true
         description: Management IP address of the device under test.
+        # Opens a Run-owned session to this host as role "dut" (spec section 51).
+        device_role: dut
 
       - id: customer_port
         label: Customer Port

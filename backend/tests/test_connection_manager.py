@@ -16,8 +16,8 @@ def _spec(role: str = "dut", secret_reference: str | None = None) -> DeviceSpec:
 def test_establish_and_run_simulated() -> None:
     mgr = ConnectionManager(SimulatedTransport(), command_timeout=5, reconnect_attempts=1)
     mgr.establish([_spec()], secret_resolver=None)
-    out = mgr.run("dut", "show version")
-    assert "show version" in out
+    out = mgr.run("dut", "show interfaces description")
+    assert "ge" in out  # simulated DNOS device lists ge interfaces
     assert mgr.roles == ["dut"]
     mgr.close_all()
     assert mgr.roles == []

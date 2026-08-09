@@ -28,12 +28,14 @@ from app.connections.manager import ConnectionManager
 from app.connections.transport import get_transport
 from app.core.config import get_settings
 from app.core.enums import ExecutionStatus, RunStatus
+from app.core.errors import ApiError
 from app.db.session import SessionLocal
 from app.environments.models import Environment
 from app.secrets.store import SecretStore
 from app.evaluation.verdict import final_verdict_for_test
 from app.git import service as git_service
 from app.git.fetch import fetch_revision
+from app.prerequisites.service import resolve_for as resolve_prereq_template
 from app.results.models import AiEvaluation, Artifact, TestRun
 from app.runner.executor import ExecOutcome, execute_test
 from app.runner.workspace import Workspace, create_workspace
@@ -94,7 +96,15 @@ def _execute_run(run_id: str) -> None:
         )
         broker = ConnectionBroker(manager)
         try:
-            specs = resolve_required_devices(env, values) if env else []
+            # Device sessions are prerequisite-driven (spec section 51): each
+            # prerequisite field with a device_role opens one session.
+            specs = []
+            if env:
+                try:
+                    template = resolve_prereq_template(db, run.suite_id, run.environment_id)
+                    specs = resolve_required_devices(template, values)
+                except ApiError:
+                    specs = []  # no prerequisite template -> no device sessions
             if specs:
                 manager.establish(specs, secret_resolver=SecretStore(db).reveal)
             broker.start()

@@ -60,6 +60,12 @@ class PrerequisiteField(BaseModel):
     check: CheckSpec | None = None
     remediation: str | None = None
     sensitive: bool = False
+    # Device binding (spec section 51): a field carrying a device address can
+    # declare the role of the device to open a Run-owned session to. The user's
+    # entered value becomes the host. `credential_ref` names another field (a
+    # secret_reference) holding the credential for that device.
+    device_role: str | None = None
+    credential_ref: str | None = None
 
 
 class PrerequisiteSection(BaseModel):
