@@ -27,7 +27,7 @@ from app.connections.manager import ConnectionError as DeviceConnectionError
 from app.connections.manager import ConnectionManager
 from app.connections.transport import get_transport
 from app.core.config import get_settings
-from app.core.enums import ExecutionStatus, RunStatus
+from app.core.enums import AiVerdict, ExecutionStatus, RunStatus
 from app.core.errors import ApiError
 from app.db.session import SessionLocal
 from app.secrets.store import SecretStore
@@ -239,8 +239,9 @@ def _evaluate_with_ai(
     evaluator = get_evaluator_for_user(db, run.user_id, settings)
     try:
         ai_result = evaluator.evaluate(request)
-    except Exception:  # noqa: BLE001 - a failed AI review must not crash the run
+    except Exception as exc:  # noqa: BLE001 - a failed AI review must not crash the run
         logger.exception("ai_evaluation_failed run_id=%s test_id=%s", run.id, tr.test_id)
+        _record_ai_failure(db, tr, evaluator, str(exc))
         return
 
     db.add(
@@ -264,6 +265,30 @@ def _evaluate_with_ai(
 
     tr.ai_verdict = ai_result.ai_verdict.value
     tr.ai_confidence = ai_result.confidence
+    final = final_verdict_for_test(tr.execution_status, tr.test_verdict, tr.ai_verdict)
+    tr.final_verdict = final.value if final else None
+    db.commit()
+
+
+def _record_ai_failure(db, tr: TestRun, evaluator, message: str) -> None:
+    """AI review could not complete (e.g. provider 429/outage): record it as
+    INCONCLUSIVE so the run surfaces REVIEW_REQUIRED with a reason instead of
+    silently staying PENDING."""
+    summary = f"AI review could not be completed: {message[:300]}"
+    db.add(
+        AiEvaluation(
+            test_run_id=tr.id,
+            model=getattr(evaluator, "model", "unknown"),
+            prompt_version=PROMPT_VERSION,
+            policy_version=POLICY_VERSION,
+            ai_verdict=AiVerdict.INCONCLUSIVE.value,
+            confidence=None,
+            summary=summary,
+            analysis_json={"error": message[:1000]},
+        )
+    )
+    tr.ai_verdict = AiVerdict.INCONCLUSIVE.value
+    tr.ai_confidence = None
     final = final_verdict_for_test(tr.execution_status, tr.test_verdict, tr.ai_verdict)
     tr.final_verdict = final.value if final else None
     db.commit()

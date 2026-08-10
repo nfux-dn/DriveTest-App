@@ -8,6 +8,7 @@ Neither provider is required for dev; the mock evaluator is the default.
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 
@@ -17,6 +18,8 @@ from app.ai.prompts import SYSTEM_PROMPT, build_user_content
 from app.core.config import Settings
 
 logger = logging.getLogger("drivetest.ai.providers")
+
+_TRANSIENT_STATUS = {429, 500, 502, 503, 504}
 
 
 class _HttpEvaluatorBase:
@@ -30,13 +33,33 @@ class _HttpEvaluatorBase:
         retries = max(0, self._settings.ai_max_retries)
         last_error: Exception | None = None
         for attempt in range(retries + 1):
-            raw = self._call_model(request)
+            try:
+                raw = self._call_model(request)
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                last_error = exc
+                if status in _TRANSIENT_STATUS and attempt < retries:
+                    delay = 2 ** attempt
+                    logger.warning(
+                        "ai_http_transient status=%s attempt=%d model=%s retry_in=%ss",
+                        status, attempt + 1, self.model, delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise AiResponseError(f"AI provider HTTP {status}: {exc.response.text[:200]}") from exc
+            except httpx.HTTPError as exc:  # network/timeout
+                last_error = exc
+                if attempt < retries:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise AiResponseError(f"AI provider request failed: {exc}") from exc
+
             try:
                 return parse_ai_result(raw, request.test_verdict)
             except AiResponseError as exc:
                 last_error = exc
                 logger.warning("ai_response_invalid attempt=%d model=%s", attempt + 1, self.model)
-        raise AiResponseError(f"AI response invalid after {retries + 1} attempts: {last_error}")
+        raise AiResponseError(f"AI evaluation failed after {retries + 1} attempts: {last_error}")
 
 
 class OpenAIEvaluator(_HttpEvaluatorBase):
