@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # and reused by all tests; tests never open SSH themselves.
     ssh_transport: str = "simulated"  # simulated | ssh (paramiko)
     ssh_default_username: str = "admin"
+    # Fallback SSH password used when a device field has no credential_ref
+    # (e.g. a common lab login like DNOS dnroot). Empty means key/no-password.
+    ssh_default_password: str = ""
     ssh_port: int = 22
     ssh_connect_timeout_seconds: float = 15.0
     ssh_command_timeout_seconds: float = 30.0

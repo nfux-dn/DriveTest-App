@@ -196,19 +196,24 @@ class SshTransport:
 
     name = "ssh"
 
-    def __init__(self, connect_timeout: float) -> None:
+    def __init__(self, connect_timeout: float, default_password: str = "") -> None:
         self._connect_timeout = connect_timeout
+        self._default_password = default_password
 
     def open(self, spec: DeviceSpec, password: str | None) -> Any:
         import paramiko  # lazy import
 
+        # Password precedence: per-device credential_ref secret, else platform default.
+        resolved_password = password or self._default_password or None
+
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        logger.info("ssh_connect host=%s port=%s user=%s", spec.host, spec.port, spec.username)
         client.connect(
             hostname=spec.host,
             port=spec.port,
             username=spec.username,
-            password=password,
+            password=resolved_password,
             timeout=self._connect_timeout,
             allow_agent=False,
             look_for_keys=False,
@@ -270,5 +275,8 @@ def get_transport() -> Transport:
 
     settings = get_settings()
     if settings.ssh_transport == "ssh":
-        return SshTransport(connect_timeout=settings.ssh_connect_timeout_seconds)
+        return SshTransport(
+            connect_timeout=settings.ssh_connect_timeout_seconds,
+            default_password=settings.ssh_default_password,
+        )
     return SimulatedTransport()
