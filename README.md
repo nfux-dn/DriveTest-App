@@ -180,12 +180,20 @@ token.
 
 ## AI evaluator
 
-Every completed test gets an AI review (spec §6). The provider is pluggable behind
-`app/ai`. The default is an offline `mock` evaluator, so the demo works with no network or
-API key. To use a real model, set in `.env`:
+Every completed test gets an AI review (spec §6). The reviewer reads the files gathered
+during the run (device `ssh_session` transcript, `stdout`, `stderr`, `result.json`) and
+compares them against the test's expected results (`evaluation.md`).
+
+**Per-user keys (recommended):** each user connects their own provider + API key on the
+**AI Provider** page in the app. The key is encrypted at rest (Fernet `SecretStore`, like Git
+tokens) and never returned to the browser, logged, or placed in prompts. Runs are reviewed
+with the requesting user's key.
+
+**Fallbacks:** if a user hasn't connected a key, the platform uses the global `.env` key if
+set, otherwise the offline `mock` evaluator:
 
 ```bash
-DRIVETEST_AI_PROVIDER=openai        # or: anthropic
+DRIVETEST_AI_PROVIDER=openai        # or: anthropic  (global fallback only)
 DRIVETEST_OPENAI_API_KEY=sk-...     # or DRIVETEST_ANTHROPIC_API_KEY=...
 ```
 

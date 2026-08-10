@@ -5,6 +5,7 @@ import { LoginPage } from "../pages/LoginPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { NewRunWizard } from "../pages/NewRunWizard";
 import { GitConnectPage } from "../pages/GitConnectPage";
+import { AiProviderPage } from "../pages/AiProviderPage";
 import { RunDetailPage } from "../pages/RunDetailPage";
 
 export function App() {
@@ -30,6 +31,7 @@ export function App() {
             <Route path="runs/new" element={<NewRunWizard />} />
             <Route path="runs/:runId" element={<RunDetailPage />} />
             <Route path="git" element={<GitConnectPage />} />
+            <Route path="ai" element={<AiProviderPage />} />
             <Route path="login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

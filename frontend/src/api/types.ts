@@ -93,6 +93,14 @@ export interface GitConnection {
   expires_at: string | null;
 }
 
+export interface AiConnection {
+  id: string;
+  provider: string;
+  model: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
 export interface Repository {
   id: number;
   full_name: string;

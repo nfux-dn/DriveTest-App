@@ -5,6 +5,7 @@ Alembic's env.py and any create_all call must import this module.
 
 from __future__ import annotations
 
+from app.ai.models import AiConnection  # noqa: F401
 from app.auth.models import User  # noqa: F401
 from app.git.models import GitConnection  # noqa: F401
 from app.prerequisites.models import PrerequisiteInstance  # noqa: F401

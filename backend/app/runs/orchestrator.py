@@ -19,7 +19,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.ai.base import AiRequest
-from app.ai.factory import get_evaluator
+from app.ai.factory import get_evaluator_for_user
 from app.ai.prompts import POLICY_VERSION, PROMPT_VERSION
 from app.connections.broker import ConnectionBroker
 from app.connections.devices import resolve_required_devices
@@ -236,7 +236,7 @@ def _evaluate_with_ai(
         files=files,
     )
 
-    evaluator = get_evaluator(settings)
+    evaluator = get_evaluator_for_user(db, run.user_id, settings)
     try:
         ai_result = evaluator.evaluate(request)
     except Exception:  # noqa: BLE001 - a failed AI review must not crash the run

@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { api } from "./client";
 import type {
+  AiConnection,
   Artifact,
   Branch,
   CheckRunResponse,
@@ -97,6 +98,30 @@ export function useRunCheck() {
         `/api/prerequisites/checks/${payload.field_id}/run`,
         payload,
       ),
+  });
+}
+
+export function useAiConnection(): UseQueryResult<AiConnection | null> {
+  return useQuery({
+    queryKey: ["ai-connection"],
+    queryFn: () => api.get<AiConnection | null>("/api/ai/connection"),
+  });
+}
+
+export function useConnectAi() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { provider: string; api_key: string; model?: string }) =>
+      api.post<AiConnection>("/api/ai/connect", payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-connection"] }),
+  });
+}
+
+export function useDisconnectAi() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post("/api/ai/disconnect"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-connection"] }),
   });
 }
 

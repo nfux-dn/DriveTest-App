@@ -27,6 +27,7 @@ export function Layout() {
         <NavItem to="/" label="Dashboard" end />
         <NavItem to="/runs/new" label="New Run" />
         <NavItem to="/git" label="Git Connection" />
+        <NavItem to="/ai" label="AI Provider" />
 
         <div style={{ marginTop: "auto", paddingTop: 18 }}>
           <div className="row" style={{ padding: "0 8px 10px", fontSize: 12 }}>
