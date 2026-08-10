@@ -5,7 +5,7 @@ import { ApiError } from "../api/client";
 const MODEL_PLACEHOLDER: Record<string, string> = {
   openai: "gpt-4o-mini (default)",
   anthropic: "claude-3-5-sonnet-latest (default)",
-  cursor: "composer-2.5 (default)",
+  cursor: "leave blank for Cursor's default",
 };
 
 const KEY_PLACEHOLDER: Record<string, string> = {

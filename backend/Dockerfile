@@ -3,10 +3,15 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# git is required by the runner to fetch repositories (spec section 18).
+# git is required by the runner to fetch repositories (spec section 18); curl is
+# used to install the Cursor Agent CLI (the "cursor" AI provider).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends git curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Install the cursor-agent CLI (used headlessly by the Cursor AI provider).
+RUN curl -fsS https://cursor.com/install | bash
+ENV PATH="/root/.local/bin:${PATH}"
 
 WORKDIR /app
 

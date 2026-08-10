@@ -87,11 +87,12 @@ class OpenAIEvaluator(_HttpEvaluatorBase):
 
 
 class CursorEvaluator:
-    """Evaluator backed by the Cursor SDK local agent (composer models).
+    """Evaluator backed by the `cursor-agent` CLI (Composer models).
 
-    Runs a one-shot `Agent.prompt` with our system+user content and parses the
-    agent's final text as the JSON verdict. cursor-sdk is imported lazily so the
-    app still works when Cursor isn't the selected provider.
+    Runs the CLI headlessly in read-only "ask" mode (`--mode ask --force`), which
+    returns the model's text; we parse that as the JSON verdict. The CLI is used
+    directly (not the SDK local runtime, which can't bypass the workspace-trust
+    prompt in a headless container).
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -99,40 +100,54 @@ class CursorEvaluator:
 
     @property
     def model(self) -> str:
-        return self._settings.cursor_model
+        return self._settings.cursor_model or "cursor-default"
 
     def evaluate(self, request: AiRequest) -> AiResult:
+        import os
+        import shutil
+        import subprocess
         import tempfile
 
-        from cursor_sdk import Agent, AgentOptions, LocalAgentOptions
+        exe = shutil.which("cursor-agent")
+        if not exe:
+            raise AiResponseError(
+                "Cursor CLI ('cursor-agent') is not installed in the backend image."
+            )
+        if not self._settings.cursor_api_key:
+            raise AiResponseError("No Cursor API key configured for this user.")
 
         prompt = SYSTEM_PROMPT + "\n\n" + build_user_content(request)
+        cmd = [exe, "-p", "--force", "--mode", "ask", "--output-format", "text"]
+        if self._settings.cursor_model:
+            cmd += ["--model", self._settings.cursor_model]
+        cmd += [prompt]
+
+        env = {**os.environ, "CURSOR_API_KEY": self._settings.cursor_api_key}
+        timeout = self._settings.ai_request_timeout_seconds
         retries = max(0, self._settings.ai_max_retries)
         last_error: Exception | None = None
 
         for attempt in range(retries + 1):
             try:
-                result = Agent.prompt(
-                    prompt,
-                    AgentOptions(
-                        api_key=self._settings.cursor_api_key,
-                        model=self._settings.cursor_model,
-                        # Empty scratch dir: this is a review task, not a code edit.
-                        local=LocalAgentOptions(cwd=tempfile.mkdtemp(prefix="drivetest-ai-")),
-                    ),
+                proc = subprocess.run(
+                    cmd,
+                    cwd=tempfile.mkdtemp(prefix="drivetest-ai-"),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
                 )
-            except Exception as exc:  # noqa: BLE001 - startup/auth/network failure
-                raise AiResponseError(f"Cursor agent failed to run: {exc}") from exc
-
-            if getattr(result, "status", None) == "error":
-                raise AiResponseError(f"Cursor run errored (id={getattr(result, 'id', None)}).")
-
-            text = getattr(result, "result", None) or ""
+            except subprocess.TimeoutExpired as exc:
+                raise AiResponseError(f"Cursor agent timed out after {timeout}s.") from exc
+            if proc.returncode != 0:
+                raise AiResponseError(
+                    f"Cursor agent exited {proc.returncode}: {(proc.stderr or '').strip()[:300]}"
+                )
             try:
-                return parse_ai_result(text, request.test_verdict)
+                return parse_ai_result(proc.stdout, request.test_verdict)
             except AiResponseError as exc:
                 last_error = exc
-                logger.warning("ai_response_invalid attempt=%d model=%s", attempt + 1, self.model)
+                logger.warning("ai_response_invalid attempt=%d model=cursor", attempt + 1)
 
         raise AiResponseError(f"Cursor AI response invalid after {retries + 1} attempts: {last_error}")
 
