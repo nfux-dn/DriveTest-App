@@ -20,6 +20,21 @@ from app.prerequisites.schemas import (
 # A permissive interface-name pattern (e.g. ge800-31/0/17, GigabitEthernet0/0/1).
 _INTERFACE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*[-]?\d+([/:.]\d+)*$")
 
+# A DNS hostname label pattern (RFC 1123): letters/digits/hyphens, dot-separated.
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
+)
+
+
+def _is_ip_or_hostname(value: str) -> bool:
+    import ipaddress as _ip
+
+    try:
+        _ip.ip_address(value)
+        return True
+    except ValueError:
+        return bool(_HOSTNAME_RE.match(value))
+
 
 def _iter_fields(template: PrerequisiteTemplate):
     for section in template.sections:
@@ -77,6 +92,9 @@ def _validate_field_value(field: PrerequisiteField, raw) -> str | None:
             ipaddress.ip_address(str(raw))
         except ValueError:
             return f"{field.label} must be a valid IP address."
+    elif t == FieldType.HOST:
+        if not _is_ip_or_hostname(str(raw)):
+            return f"{field.label} must be a valid IP address or hostname."
     elif t == FieldType.INTERFACE:
         if not _INTERFACE_RE.match(str(raw)):
             return f"{field.label} must be a valid interface name."

@@ -468,10 +468,14 @@ confirmation
 select
 multiselect
 ip
+host
 interface
 secret_reference
 check
 ```
+
+`host` accepts either an IP address or a DNS hostname (use it for device
+management addresses the user may enter either way).
 
 ---
 

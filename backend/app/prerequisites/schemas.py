@@ -22,6 +22,7 @@ class FieldType(StrEnum):
     SELECT = "select"
     MULTISELECT = "multiselect"
     IP = "ip"
+    HOST = "host"  # accepts an IP address OR a DNS hostname
     INTERFACE = "interface"
     SECRET_REFERENCE = "secret_reference"
     CHECK = "check"

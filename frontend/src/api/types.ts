@@ -29,6 +29,7 @@ export type FieldType =
   | "select"
   | "multiselect"
   | "ip"
+  | "host"
   | "interface"
   | "secret_reference"
   | "check";

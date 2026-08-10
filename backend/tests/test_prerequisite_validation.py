@@ -128,6 +128,33 @@ def test_confirmation_must_be_true() -> None:
     assert any(e.field_id == "topology_verified" for e in res.errors)
 
 
+def _host_template() -> PrerequisiteTemplate:
+    return PrerequisiteTemplate(
+        id="t",
+        version=1,
+        suite_id="s",
+        sections=[
+            PrerequisiteSection(
+                id="c",
+                title="Connectivity",
+                fields=[PrerequisiteField(id="dut", label="DUT", type="host", required=True)],
+            )
+        ],
+    )
+
+
+def test_host_accepts_ip_and_hostname() -> None:
+    assert validate_values(_host_template(), {"dut": "10.0.0.1"}).status == "VALID"
+    assert validate_values(_host_template(), {"dut": "dut-1.lab.example.com"}).status == "VALID"
+    assert validate_values(_host_template(), {"dut": "router01"}).status == "VALID"
+
+
+def test_host_rejects_invalid() -> None:
+    res = validate_values(_host_template(), {"dut": "bad host!"})
+    assert res.status == "INVALID"
+    assert any(e.field_id == "dut" for e in res.errors)
+
+
 def test_invalid_ip_fails() -> None:
     res = validate_values(
         _template(),
