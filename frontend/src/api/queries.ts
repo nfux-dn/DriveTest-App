@@ -9,7 +9,6 @@ import type {
   Branch,
   CheckRunResponse,
   Commit,
-  CompatibilityResult,
   CreateRunRequest,
   GitConnection,
   PrerequisiteTemplate,
@@ -18,6 +17,7 @@ import type {
   RunDetail,
   RunReport,
   Suite,
+  SuiteReadme,
   TestRunDetail,
   User,
   ValidateResponse,
@@ -60,38 +60,28 @@ export function useSuites(): UseQueryResult<Suite[]> {
   return useQuery({ queryKey: ["suites"], queryFn: () => api.get<Suite[]>("/api/suites") });
 }
 
-export function useCompatibleEnvironments(
-  suiteId: string | null,
-): UseQueryResult<CompatibilityResult[]> {
+export function useSuiteReadme(suiteId: string | null): UseQueryResult<SuiteReadme> {
   return useQuery({
-    queryKey: ["compatible-envs", suiteId],
-    queryFn: () =>
-      api.get<CompatibilityResult[]>(`/api/suites/${suiteId}/compatible-environments`),
+    queryKey: ["suite-readme", suiteId],
+    queryFn: () => api.get<SuiteReadme>(`/api/suites/${suiteId}/readme`),
     enabled: !!suiteId,
   });
 }
 
 export function usePrerequisites(
   suiteId: string | null,
-  environmentId: string | null,
 ): UseQueryResult<PrerequisiteTemplate> {
   return useQuery({
-    queryKey: ["prerequisites", suiteId, environmentId],
-    queryFn: () =>
-      api.get<PrerequisiteTemplate>(
-        `/api/suites/${suiteId}/environments/${environmentId}/prerequisites`,
-      ),
-    enabled: !!suiteId && !!environmentId,
+    queryKey: ["prerequisites", suiteId],
+    queryFn: () => api.get<PrerequisiteTemplate>(`/api/suites/${suiteId}/prerequisites`),
+    enabled: !!suiteId,
   });
 }
 
 export function useValidatePrerequisites() {
   return useMutation({
-    mutationFn: (payload: {
-      suite_id: string;
-      environment_id: string;
-      values: Record<string, unknown>;
-    }) => api.post<ValidateResponse>("/api/prerequisites/validate", payload),
+    mutationFn: (payload: { suite_id: string; values: Record<string, unknown> }) =>
+      api.post<ValidateResponse>("/api/prerequisites/validate", payload),
   });
 }
 
@@ -100,7 +90,6 @@ export function useRunCheck() {
     mutationFn: (payload: {
       field_id: string;
       suite_id: string;
-      environment_id: string;
       values: Record<string, unknown>;
     }) =>
       api.post<CheckRunResponse>(

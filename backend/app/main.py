@@ -29,7 +29,6 @@ def health() -> dict[str, str]:
 
 def _include_routers(app: FastAPI) -> None:
     from app.auth.router import router as auth_router
-    from app.environments.router import router as environments_router
     from app.git.router import router as git_router
     from app.prerequisites.router import router as prerequisites_router
     from app.results.router import router as results_router
@@ -39,7 +38,6 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(suites_router)
-    app.include_router(environments_router)
     app.include_router(prerequisites_router)
     app.include_router(git_router)
     app.include_router(runs_router)

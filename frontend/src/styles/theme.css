@@ -279,6 +279,42 @@ pre {
   }
 }
 
+/* Rendered suite README in the Environment tab. */
+.markdown {
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.markdown h1 {
+  font-size: 18px;
+}
+.markdown h2 {
+  font-size: 15px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.markdown code {
+  background: #05060a;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.markdown pre {
+  background: #05060a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  overflow: auto;
+}
+.markdown table {
+  border-collapse: collapse;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+
 pre.terminal {
   background: #05060a;
   border: 1px solid var(--border);

@@ -34,7 +34,7 @@ export function DashboardPage() {
               <div>
                 <div style={{ fontWeight: 600 }}>{run.suite_id}</div>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  {run.environment_id} · {new Date(run.created_at).toLocaleString()}
+                  {new Date(run.created_at).toLocaleString()}
                 </div>
               </div>
               <StatusPill value={run.status} />

@@ -1,11 +1,8 @@
-"""Resolve a prerequisite template for a (suite, platform, system_type).
+"""Resolve a Suite's prerequisite template.
 
-Layering (each layer optional, sections concatenated, later fields override
-earlier fields with the same id), per spec section 9/14 directory model:
+One prerequisite file per suite (spec sections 10-14):
 
     prerequisites/<suite_id>/common.yaml
-    prerequisites/<suite_id>/<platform>/default.yaml
-    prerequisites/<suite_id>/<platform>/<system_type>.yaml
 """
 
 from __future__ import annotations
@@ -30,23 +27,13 @@ def _read_yaml(path: Path) -> dict:
         return yaml.safe_load(fh) or {}
 
 
-def _candidate_files(definitions_dir: Path, suite_id: str, platform: str | None, system_type: str | None) -> list[Path]:
+def _candidate_files(definitions_dir: Path, suite_id: str) -> list[Path]:
     base = definitions_dir / "prerequisites" / suite_id
-    candidates = [base / "common.yaml"]
-    if platform:
-        candidates.append(base / platform / "default.yaml")
-        if system_type:
-            candidates.append(base / platform / f"{system_type}.yaml")
-    return candidates
+    return [base / "common.yaml"]
 
 
-def resolve_template(
-    definitions_dir: Path,
-    suite_id: str,
-    platform: str | None,
-    system_type: str | None,
-) -> PrerequisiteTemplate:
-    files = [p for p in _candidate_files(definitions_dir, suite_id, platform, system_type) if p.exists()]
+def resolve_template(definitions_dir: Path, suite_id: str) -> PrerequisiteTemplate:
+    files = [p for p in _candidate_files(definitions_dir, suite_id) if p.exists()]
     if not files:
         raise ApiError(
             code="PREREQUISITE_TEMPLATE_NOT_FOUND",
@@ -77,10 +64,8 @@ def resolve_template(
         sections=list(merged_sections.values()),
     )
     logger.info(
-        "prerequisite_template_resolved suite=%s platform=%s system=%s sections=%d",
+        "prerequisite_template_resolved suite=%s sections=%d",
         suite_id,
-        platform,
-        system_type,
         len(template.sections),
     )
     return template

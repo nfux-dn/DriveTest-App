@@ -37,25 +37,23 @@ Build a web-based task and test orchestration platform for network equipment val
 The system will:
 
 1. Let a user select a Test Suite.
-2. Load the requirements of that Suite.
-3. Let the user select a compatible Environment.
-4. Resolve prerequisites based on:
-   - Suite
-   - Environment
-   - Platform
-   - System type
-5. Dynamically generate a prerequisite form.
-6. Validate all required prerequisite fields.
-7. Run automatic prerequisite checks where possible.
-8. Require manual confirmation for prerequisites that cannot be checked automatically.
-9. Let the user select a Git repository branch/commit using that user's own Git credentials.
-10. Pull the selected Git revision into a temporary workspace.
+2. Show the Suite's Environment tab: the suite README (purpose + connectivity
+   scheme) plus a dynamically generated prerequisite form.
+3. Resolve prerequisites from the Suite's prerequisite file.
+4. Dynamically generate a prerequisite form where the user enters device details
+   (management IPs, traffic generator, etc.).
+5. Validate all required prerequisite fields.
+6. Run automatic prerequisite checks where possible.
+7. Require manual confirmation for prerequisites that cannot be checked automatically.
+8. Let the user select a Git repository branch/commit using that user's own Git credentials.
+9. Pull the selected Git revision into a temporary workspace.
+10. Open a persistent connection to each device the user provided (spec section 51).
 11. Execute tests sequentially.
 12. Detect script/runtime failures separately from product/test failures.
 13. Let every test produce a deterministic verdict OR explicitly punt the verdict to AI.
 14. Always run an AI review for every completed test.
 15. Calculate the final verdict according to the rules in this document.
-16. Store structured results, logs, AI analysis, evidence, Git revision, environment, and user.
+16. Store structured results, logs, AI analysis, evidence, Git revision, devices, and user.
 17. Present a clear dark premium dashboard and run report.
 
 ---
@@ -82,64 +80,24 @@ A Suite does NOT hardcode one specific lab.
 
 ## Environment
 
-An Environment represents an available lab/test setup.
+There is no pre-defined Environment object. The "Environment" is the set of
+device details the user supplies for a specific Run, entered in the Environment
+tab through the Suite's prerequisite form (for example DUT management IP, traffic
+generator address). The user simply states the addresses; a stored lab catalog is
+a future enhancement.
 
-It may contain:
+Each Suite ships a README describing:
 
-- Devices
-- Management addresses
-- Device roles
-- Platform
-- System type
-- Software version
-- Traffic generator
-- Capabilities
-- Topology metadata
-- Secret references
+- its purpose, and
+- the connectivity scheme (how to cable the devices).
 
-Example:
-
-```yaml
-name: lab_23
-platform: platform_a
-system_type: pwhe
-software_version: "25.2"
-
-capabilities:
-  - qos
-  - shaping
-  - mpls
-  - pwhe
-```
-
----
-
-## Requirement
-
-A Requirement determines whether an Environment is compatible with a Suite.
-
-Example:
-
-```yaml
-requirements:
-  min_devices: 2
-  traffic_generator: true
-
-  capabilities:
-    - qos
-    - shaping
-    - pwhe
-```
-
-Requirements answer:
-
-> Can this Environment run this Suite at all?
+The Environment tab shows that README above the prerequisite form.
 
 ---
 
 ## Prerequisite
 
-A Prerequisite determines whether a compatible Environment is currently ready for execution.
+A Prerequisite determines whether the supplied devices are ready for execution and captures the runtime values (device addresses, ports, confirmations) a Suite needs.
 
 Prerequisites may be:
 
@@ -191,17 +149,11 @@ The UI and backend must follow this logical order:
 ```text
 SELECT SUITE
     ↓
-Load Suite Requirements
+ENVIRONMENT TAB
+  (show Suite README: purpose + connectivity)
+  (generate dynamic prerequisite form from the Suite's prerequisite file)
     ↓
-Find Compatible Environments
-    ↓
-SELECT ENVIRONMENT
-    ↓
-Resolve Prerequisite Profile
-    ↓
-Generate Dynamic Prerequisite Form
-    ↓
-Fill Inputs / Manual Confirmations
+Fill Device Details / Inputs / Manual Confirmations
     ↓
 Run Automatic Prerequisite Checks
     ↓
@@ -216,6 +168,8 @@ Create Task / Run
 Create Temporary Workspace
           ↓
 Fetch Exact Git Revision
+          ↓
+Open Device Sessions (from prerequisite device_role fields)
           ↓
 Execute Tests Sequentially
           ↓
@@ -438,6 +392,10 @@ network-tests/
 
 # 10. Suite definition
 
+A Suite package is a folder containing `suite.yaml`, a `README.md` (purpose +
+connectivity scheme, shown in the Environment tab), a prerequisite file, and the
+tests.
+
 Example `suite.yaml`:
 
 ```yaml
@@ -445,24 +403,14 @@ id: pwhe_shaping
 name: PWHE Shaping
 description: Validate PWHE shaping behavior.
 
-requirements:
-  min_devices: 2
-  traffic_generator: true
-
-  capabilities:
-    - qos
-    - shaping
-    - pwhe
-
-supported_platforms:
-  - platform_a
-  - platform_b
-
 tests:
   - max_bandwidth
   - high_priority_queue
   - congestion_behavior
 ```
+
+The device requirements are expressed by the prerequisite file (the `device_role`
+fields the user must fill), not by a compatibility block.
 
 ---
 
@@ -645,7 +593,6 @@ Example:
 ```json
 {
   "suite": "pwhe_shaping",
-  "environment": "lab_23",
   "values": {
     "dut_management_ip": "10.10.1.20",
     "customer_port": "ge800-31/0/17",
@@ -1092,25 +1039,11 @@ source_repository
 source_path
 ```
 
-## environments
-
-```text
-id
-name
-platform
-system_type
-software_version
-capabilities_json
-metadata_json
-enabled
-```
-
 ## runs
 
 ```text
 id
 suite_id
-environment_id
 user_id
 repository
 branch
@@ -1120,6 +1053,9 @@ started_at
 finished_at
 created_at
 ```
+
+There is no `environments` table. Device details for a Run live in the
+prerequisite instance values (see `prerequisite_instances`).
 
 ## prerequisite_instances
 
@@ -1186,20 +1122,13 @@ MVP endpoints can follow this shape.
 ```text
 GET /api/suites
 GET /api/suites/{suite_id}
-GET /api/suites/{suite_id}/compatible-environments
-```
-
-## Environments
-
-```text
-GET /api/environments
-GET /api/environments/{environment_id}
+GET /api/suites/{suite_id}/readme
 ```
 
 ## Prerequisites
 
 ```text
-GET /api/suites/{suite_id}/environments/{environment_id}/prerequisites
+GET /api/suites/{suite_id}/prerequisites
 POST /api/prerequisites/validate
 POST /api/prerequisites/checks/{check_id}/run
 ```
@@ -1427,20 +1356,14 @@ Select Suite
 Step 2:
 
 ```text
-Select Environment
+Environment
 ```
 
-Only compatible environments should appear.
+Shows the Suite README (purpose + connectivity scheme) above the dynamic
+prerequisite form. The user enters device details (management IPs, traffic
+generator, etc.) and runs automatic checks.
 
 Step 3:
-
-```text
-Prerequisites
-```
-
-Dynamic form plus automatic checks.
-
-Step 4:
 
 ```text
 Git Revision
@@ -1448,7 +1371,7 @@ Git Revision
 
 Repository / branch / commit.
 
-Step 5:
+Step 4:
 
 ```text
 Review & Run
@@ -1464,7 +1387,7 @@ Display:
 
 ```text
 Suite name
-Environment
+Devices (from prerequisites)
 Git branch
 Commit SHA
 Requested by
@@ -1578,7 +1501,6 @@ run_id
 test_run_id
 user_id
 suite_id
-environment_id
 ```
 
 Never include:
@@ -1713,19 +1635,17 @@ Frontend can call backend health endpoint
 
 ---
 
-## Phase 2 — Suite and Environment model
+## Phase 2 — Suite model
 
 Implement:
 
-- Suite models
-- Environment models
-- requirements matcher
+- Suite models (indexed from the definitions source)
 - basic Suite list
-- compatible Environment list
+- Suite README endpoint (purpose + connectivity), shown in the Environment tab
 
 Acceptance:
 
-User can select Suite and only see compatible Environments.
+User can select a Suite and see its README.
 
 ---
 
@@ -2002,8 +1922,8 @@ The MVP is successful when a user can:
 1. Log into the application.
 2. Connect their Git identity.
 3. Select a Suite.
-4. Select a compatible Environment.
-5. Fill a dynamically generated prerequisite form.
+4. Open the Environment tab (suite README + prerequisite form).
+5. Fill a dynamically generated prerequisite form (device details).
 6. Pass automatic/manual prerequisite validation.
 7. Select branch/commit.
 8. Start a Run.
@@ -2015,7 +1935,7 @@ The MVP is successful when a user can:
 14. See `final_verdict`.
 15. Open a historical Run and understand exactly:
     - who ran it
-    - which environment
+    - which devices (from the prerequisite values)
     - which Git commit
     - which tests ran
     - what failed

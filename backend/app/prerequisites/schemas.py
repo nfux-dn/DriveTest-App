@@ -83,7 +83,6 @@ class PrerequisiteTemplate(BaseModel):
 
 class ValidateRequest(BaseModel):
     suite_id: str
-    environment_id: str
     values: dict[str, Any] = {}
 
 
@@ -101,7 +100,6 @@ class ValidateResponse(BaseModel):
 
 class CheckRunRequest(BaseModel):
     suite_id: str
-    environment_id: str
     field_id: str
     values: dict[str, Any] = {}
 

@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   useBranches,
   useCommits,
-  useCompatibleEnvironments,
   useCreateRun,
   useGitConnections,
   usePrerequisites,
   useRepositories,
+  useSuiteReadme,
   useSuites,
   useValidatePrerequisites,
 } from "../api/queries";
@@ -15,14 +17,13 @@ import { PrerequisiteForm, isVisible } from "../components/PrerequisiteForm";
 import { ApiError } from "../api/client";
 import type { FieldError } from "../api/types";
 
-const STEPS = ["Suite", "Environment", "Prerequisites", "Git Revision", "Review & Run"];
+const STEPS = ["Suite", "Environment", "Git Revision", "Review & Run"];
 
 export function NewRunWizard() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
 
   const [suiteId, setSuiteId] = useState<string | null>(null);
-  const [environmentId, setEnvironmentId] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [errors, setErrors] = useState<FieldError[]>([]);
 
@@ -31,14 +32,14 @@ export function NewRunWizard() {
   const [commit, setCommit] = useState<string | null>(null);
 
   const suites = useSuites();
-  const envs = useCompatibleEnvironments(suiteId);
-  const prereqs = usePrerequisites(suiteId, environmentId);
+  const readme = useSuiteReadme(suiteId);
+  const prereqs = usePrerequisites(suiteId);
   const validate = useValidatePrerequisites();
   const createRun = useCreateRun();
 
   const gitConnections = useGitConnections();
   const connected = (gitConnections.data ?? []).length > 0;
-  const repos = useRepositories(connected && step === 3);
+  const repos = useRepositories(connected && step === 2);
   const branches = useBranches(repository);
   const commits = useCommits(repository, branch);
 
@@ -46,22 +47,18 @@ export function NewRunWizard() {
     setValues((prev) => ({ ...prev, [id]: value }));
   };
 
+  // Environment tab: validate prerequisites on the backend before continuing.
   const goValidateThenNext = async () => {
-    if (!suiteId || !environmentId) return;
-    const res = await validate.mutateAsync({
-      suite_id: suiteId,
-      environment_id: environmentId,
-      values,
-    });
+    if (!suiteId) return;
+    const res = await validate.mutateAsync({ suite_id: suiteId, values });
     setErrors(res.errors);
-    if (res.status === "VALID") setStep(3);
+    if (res.status === "VALID") setStep(2);
   };
 
   const submit = async () => {
-    if (!suiteId || !environmentId) return;
+    if (!suiteId) return;
     const run = await createRun.mutateAsync({
       suite_id: suiteId,
-      environment_id: environmentId,
       values,
       repository: repository ?? undefined,
       branch: branch ?? undefined,
@@ -95,65 +92,55 @@ export function NewRunWizard() {
             <div
               key={s.id}
               className={`card interactive ${suiteId === s.id ? "selected" : ""}`}
-              onClick={() => {
-                setSuiteId(s.id);
-                setEnvironmentId(null);
-              }}
+              onClick={() => setSuiteId(s.id)}
             >
               <div style={{ fontWeight: 600 }}>{s.name}</div>
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
                 {s.description}
               </div>
               <div className="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-                {s.tests.length} tests · caps: {s.requirements.capabilities.join(", ")}
+                {s.tests.length} tests
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {step === 1 && (
-        <div className="grid">
-          {envs.isLoading && <p className="muted">Finding compatible environments…</p>}
-          {envs.data?.length === 0 && (
-            <p className="muted">No compatible environments for this suite.</p>
+      {step === 1 && suiteId && (
+        <div className="stack">
+          {/* Suite README: purpose + connectivity (spec section 51). */}
+          <div className="card">
+            {readme.isLoading && <p className="muted">Loading suite details…</p>}
+            {readme.data && readme.data.markdown ? (
+              <div className="markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {readme.data.markdown}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              !readme.isLoading && (
+                <p className="muted">This suite has no README yet.</p>
+              )
+            )}
+          </div>
+
+          {/* Device details / prerequisite form. */}
+          {prereqs.data ? (
+            <PrerequisiteForm
+              template={prereqs.data}
+              suiteId={suiteId}
+              values={values}
+              errors={errors}
+              onChange={onChangeValue}
+            />
+          ) : (
+            prereqs.isLoading && <p className="muted">Loading prerequisite form…</p>
           )}
-          {(envs.data ?? []).map((c) => (
-            <div
-              key={c.environment.id}
-              className={`card interactive ${environmentId === c.environment.id ? "selected" : ""}`}
-              onClick={() => setEnvironmentId(c.environment.id)}
-            >
-              <div style={{ fontWeight: 600 }}>{c.environment.name}</div>
-              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                {c.environment.platform} · {c.environment.system_type} ·{" "}
-                {c.environment.software_version}
-              </div>
-              <div className="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-                {c.environment.capabilities.join(", ")}
-              </div>
-            </div>
-          ))}
+          {validate.isError && <p className="error">{(validate.error as ApiError).message}</p>}
         </div>
       )}
 
-      {step === 2 && prereqs.data && suiteId && environmentId && (
-        <>
-          <PrerequisiteForm
-            template={prereqs.data}
-            suiteId={suiteId}
-            environmentId={environmentId}
-            values={values}
-            errors={errors}
-            onChange={onChangeValue}
-          />
-          {validate.isError && (
-            <p className="error">{(validate.error as ApiError).message}</p>
-          )}
-        </>
-      )}
-
-      {step === 3 && (
+      {step === 2 && (
         <div className="card stack">
           <h3>Git Revision</h3>
           {!connected && (
@@ -225,18 +212,17 @@ export function NewRunWizard() {
         </div>
       )}
 
-      {step === 4 && (
+      {step === 3 && (
         <div className="card stack">
           <h3>Review & Run</h3>
           <SummaryRow label="Suite" value={suiteId} />
-          <SummaryRow label="Environment" value={environmentId} />
           <SummaryRow
             label="Git"
             value={repository ? `${repository} @ ${branch}${commit ? ` (${commit.slice(0, 8)})` : " (latest)"}` : "Built-in demo definitions"}
           />
           <div>
             <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-              Prerequisites
+              Device details / prerequisites
             </div>
             {visibleValueSummary.map(([label, val]) => (
               <div key={label} className="row spread" style={{ fontSize: 13 }}>
@@ -257,17 +243,11 @@ export function NewRunWizard() {
         </button>
         <NextButton
           step={step}
-          canProceed={{
-            0: !!suiteId,
-            1: !!environmentId,
-            2: true,
-            3: true,
-            4: true,
-          }}
+          canProceed={{ 0: !!suiteId, 1: true, 2: true, 3: true }}
           validating={validate.isPending}
           submitting={createRun.isPending}
           onNext={() => {
-            if (step === 2) void goValidateThenNext();
+            if (step === 1) void goValidateThenNext();
             else setStep((s) => s + 1);
           }}
           onSubmit={() => void submit()}
@@ -299,7 +279,7 @@ function NextButton({
       </button>
     );
   }
-  const label = step === 2 ? (validating ? "Validating…" : "Validate & Continue") : "Next";
+  const label = step === 1 ? (validating ? "Validating…" : "Validate & Continue") : "Next";
   return (
     <button className="btn primary" disabled={!canProceed[step] || validating} onClick={onNext}>
       {label}

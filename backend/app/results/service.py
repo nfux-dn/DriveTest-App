@@ -64,7 +64,6 @@ def build_report(db: Session, run_id: str) -> RunReport:
     return RunReport(
         run_id=run.id,
         suite_id=run.suite_id,
-        environment_id=run.environment_id,
         user_id=run.user_id,
         status=run.status,
         repository=run.repository,

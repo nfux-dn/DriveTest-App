@@ -25,8 +25,9 @@ frontend. Spec phases 1-10 are implemented.
 
 ## What you can do
 
-Sign in, connect your GitHub account, pick a test Suite, pick a compatible Environment,
-fill a dynamically generated prerequisite form, choose a Git branch/commit, start a Run,
+Sign in, connect your GitHub account, pick a test Suite, open its Environment tab (suite
+README + a dynamically generated prerequisite form where you enter device IPs),
+choose a Git branch/commit, start a Run,
 watch tests execute one by one, and review each test's result — including an AI review and
 a final verdict — plus an export-friendly report.
 
@@ -67,15 +68,14 @@ DriveTest/
 ├── docker-compose.yml         # runs db + backend + frontend
 ├── .env.example               # copy to .env and fill in
 ├── DriveTest_SPEC.md          # the source-of-truth specification
-├── definitions/               # demo Suite, Environments, prerequisite templates, tests
-│   ├── suites/demo_shaping/   # suite.yaml + tests/<id>/{test.py,test.yaml}
-│   ├── environments/          # lab_23.yaml (compatible), lab_optics.yaml (not)
-│   └── prerequisites/         # prerequisite form templates (YAML)
+├── definitions/               # demo Suites, prerequisite forms, tests
+│   ├── suites/<id>/           # suite.yaml + README.md + tests/<id>/{test.py,test.yaml}
+│   └── prerequisites/<id>/    # common.yaml (the device/prerequisite form)
 ├── backend/
 │   ├── app/                   # one folder per domain:
 │   │   ├── core/              #   config, logging, enums, error shape
 │   │   ├── db/                #   SQLAlchemy base/session/model registry
-│   │   ├── auth/ suites/ environments/ prerequisites/ git/ runs/ results/
+│   │   ├── auth/ suites/ prerequisites/ git/ runs/ results/ connections/
 │   │   ├── runner/            #   subprocess execution + result contract
 │   │   ├── ai/                #   evaluator abstraction + providers
 │   │   └── evaluation/        #   final verdict engine
@@ -148,11 +148,10 @@ Changing Python dependencies requires `docker compose build backend`.
 ## Manual demo walkthrough
 
 1. Sign in with any email (this is dev login; no password).
-2. New Run → pick "Demo Shaping Suite". Only compatible environments appear
-   (Lab 23 shows; Lab Optics is filtered out by the requirements matcher).
-3. Select Lab 23. Fill the prerequisite form. Choosing traffic generator "ixia" reveals
-   the Ixia Chassis IP field (conditional logic). Click "Validate & Continue" — validation
-   runs on the backend.
+2. New Run → pick "Demo Shaping Suite".
+3. Environment tab: read the suite README (purpose + connectivity), then fill the
+   prerequisite form — enter the DUT Management IP. Click "Validate & Continue" (validation
+   runs on the backend). There is no separate environment to select; you provide the devices.
 4. Git Revision: leave "Use built-in demo definitions" (or connect GitHub first to run
    from a real repository).
 5. Review & Run. Watch tests execute sequentially, then expand each to see its AI review

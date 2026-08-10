@@ -2,18 +2,6 @@ id: demo_shaping
 name: Demo Shaping Suite
 description: Demonstration suite validating PWHE shaping behavior end-to-end.
 
-requirements:
-  min_devices: 2
-  traffic_generator: true
-  capabilities:
-    - qos
-    - shaping
-    - pwhe
-
-supported_platforms:
-  - platform_a
-  - platform_b
-
 tests:
   - device_facts
   - basic_pass

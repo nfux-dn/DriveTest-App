@@ -49,7 +49,6 @@ class RunReport(BaseModel):
 
     run_id: str
     suite_id: str
-    environment_id: str
     user_id: str
     status: str
     repository: str | None = None

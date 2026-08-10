@@ -7,36 +7,16 @@ export interface User {
   display_name: string;
 }
 
-export interface SuiteRequirements {
-  min_devices: number;
-  traffic_generator: boolean;
-  capabilities: string[];
-}
-
 export interface Suite {
   id: string;
   name: string;
   description: string | null;
-  requirements: SuiteRequirements;
-  supported_platforms: string[];
   tests: string[];
 }
 
-export interface Environment {
-  id: string;
-  name: string;
-  platform: string | null;
-  system_type: string | null;
-  software_version: string | null;
-  capabilities: string[];
-  metadata: Record<string, unknown>;
-  enabled: boolean;
-}
-
-export interface CompatibilityResult {
-  environment: Environment;
-  compatible: boolean;
-  reasons: string[];
+export interface SuiteReadme {
+  suite_id: string;
+  markdown: string;
 }
 
 export type FieldType =
@@ -149,7 +129,6 @@ export interface TestRun {
 export interface Run {
   id: string;
   suite_id: string;
-  environment_id: string;
   user_id: string;
   repository: string | null;
   branch: string | null;
@@ -194,7 +173,6 @@ export interface TestRunDetail extends TestRun {
 export interface RunReport {
   run_id: string;
   suite_id: string;
-  environment_id: string;
   user_id: string;
   status: string;
   repository: string | null;
@@ -215,7 +193,6 @@ export interface RunReport {
 
 export interface CreateRunRequest {
   suite_id: string;
-  environment_id: string;
   values: Record<string, unknown>;
   repository?: string | null;
   branch?: string | null;

@@ -8,10 +8,8 @@ from sqlalchemy.orm import Session
 from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.db.session import get_db
-from app.environments import service as env_service
-from app.environments.schemas import CompatibilityResult
 from app.suites import service
-from app.suites.schemas import SuiteOut
+from app.suites.schemas import SuiteOut, SuiteReadmeOut
 
 router = APIRouter(prefix="/api/suites", tags=["suites"])
 
@@ -26,8 +24,8 @@ def get_suite(suite_id: str, db: Session = Depends(get_db), _: User = Depends(ge
     return service.get_suite_out(db, suite_id)
 
 
-@router.get("/{suite_id}/compatible-environments", response_model=list[CompatibilityResult])
-def compatible_environments(
+@router.get("/{suite_id}/readme", response_model=SuiteReadmeOut)
+def get_suite_readme(
     suite_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)
-) -> list[CompatibilityResult]:
-    return env_service.compatible_environments(db, suite_id)
+) -> SuiteReadmeOut:
+    return service.get_suite_readme(db, suite_id)

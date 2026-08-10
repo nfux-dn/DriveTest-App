@@ -30,7 +30,6 @@ from app.core.config import get_settings
 from app.core.enums import ExecutionStatus, RunStatus
 from app.core.errors import ApiError
 from app.db.session import SessionLocal
-from app.environments.models import Environment
 from app.secrets.store import SecretStore
 from app.evaluation.verdict import final_verdict_for_test
 from app.git import service as git_service
@@ -65,7 +64,6 @@ def _execute_run(run_id: str) -> None:
         db.commit()
 
         suite = db.get(Suite, run.suite_id)
-        env = db.get(Environment, run.environment_id)
         workspace = create_workspace(settings.workspaces_path, run_id)
 
         source_root = _resolve_source(db, run, workspace)
@@ -74,12 +72,7 @@ def _execute_run(run_id: str) -> None:
         context_base = {
             "run_id": run_id,
             "suite_id": run.suite_id,
-            "environment": {
-                "id": env.id if env else None,
-                "platform": env.platform if env else None,
-                "system_type": env.system_type if env else None,
-                "software_version": env.software_version if env else None,
-            },
+            "environment": {},
         }
 
         test_runs = db.scalars(
@@ -99,12 +92,11 @@ def _execute_run(run_id: str) -> None:
             # Device sessions are prerequisite-driven (spec section 51): each
             # prerequisite field with a device_role opens one session.
             specs = []
-            if env:
-                try:
-                    template = resolve_prereq_template(db, run.suite_id, run.environment_id)
-                    specs = resolve_required_devices(template, values)
-                except ApiError:
-                    specs = []  # no prerequisite template -> no device sessions
+            try:
+                template = resolve_prereq_template(db, run.suite_id)
+                specs = resolve_required_devices(template, values)
+            except ApiError:
+                specs = []  # no prerequisite template -> no device sessions
             if specs:
                 manager.establish(specs, secret_resolver=SecretStore(db).reveal)
             broker.start()
@@ -211,7 +203,6 @@ def _run_one_test(
 def _evaluate_with_ai(db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome, settings) -> None:
     meta = _load_test_metadata(test_dir)
     result = outcome.result_json or {}
-    env = db.get(Environment, run.environment_id)
     limit = settings.ai_max_log_excerpt_bytes
 
     request = AiRequest(
@@ -227,9 +218,6 @@ def _evaluate_with_ai(db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome
         artifacts=result.get("artifacts", []) or [],
         stdout_excerpt=(outcome.stdout or "")[:limit] or None,
         stderr_excerpt=(outcome.stderr or "")[:limit] or None,
-        platform=env.platform if env else None,
-        system_type=env.system_type if env else None,
-        software_version=env.software_version if env else None,
     )
 
     evaluator = get_evaluator(settings)

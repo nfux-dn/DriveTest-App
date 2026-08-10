@@ -13,7 +13,6 @@ import logging
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.session import SessionLocal
-from app.environments.loader import load_environments
 from app.secrets.store import SecretStore
 from app.suites.loader import load_suites
 
@@ -25,8 +24,7 @@ def cmd_seed() -> None:
     db = SessionLocal()
     try:
         suites = load_suites(db, settings.definitions_path)
-        envs = load_environments(db, settings.definitions_path)
-        logger.info("seed_complete suites=%d environments=%d", suites, envs)
+        logger.info("seed_complete suites=%d", suites)
     finally:
         db.close()
 
@@ -39,7 +37,7 @@ def main() -> None:
     configure_logging()
     parser = argparse.ArgumentParser(description="DriveTest management CLI")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("seed", help="Index suite/environment definitions into the database")
+    sub.add_parser("seed", help="Index suite definitions into the database")
     sub.add_parser("genkey", help="Generate a Fernet key for DRIVETEST_SECRET_ENCRYPTION_KEY")
     args = parser.parse_args()
 

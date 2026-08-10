@@ -10,7 +10,6 @@ from pydantic import BaseModel
 
 class CreateRunRequest(BaseModel):
     suite_id: str
-    environment_id: str
     values: dict[str, Any] = {}
     # Git revision. Optional in dev: when omitted, the local definitions source
     # is used so the runner can be exercised without a GitHub connection (D5/D6).
@@ -38,7 +37,6 @@ class TestRunOut(BaseModel):
 class RunOut(BaseModel):
     id: str
     suite_id: str
-    environment_id: str
     user_id: str
     repository: str | None = None
     branch: str | None = None

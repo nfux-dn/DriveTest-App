@@ -13,7 +13,6 @@ import type {
 interface Props {
   template: PrerequisiteTemplate;
   suiteId: string;
-  environmentId: string;
   values: Record<string, unknown>;
   errors: FieldError[];
   onChange: (id: string, value: unknown) => void;
@@ -27,7 +26,6 @@ export function isVisible(field: PrerequisiteField, values: Record<string, unkno
 export function PrerequisiteForm({
   template,
   suiteId,
-  environmentId,
   values,
   errors,
   onChange,
@@ -46,7 +44,6 @@ export function PrerequisiteForm({
               value={values[field.id]}
               error={errorFor(field.id)}
               suiteId={suiteId}
-              environmentId={environmentId}
               values={values}
               onChange={onChange}
             />
@@ -62,7 +59,6 @@ function FieldRenderer({
   value,
   error,
   suiteId,
-  environmentId,
   values,
   onChange,
 }: {
@@ -70,7 +66,6 @@ function FieldRenderer({
   value: unknown;
   error: string | undefined;
   suiteId: string;
-  environmentId: string;
   values: Record<string, unknown>;
   onChange: (id: string, value: unknown) => void;
 }) {
@@ -83,12 +78,7 @@ function FieldRenderer({
       {field.description && <span className="hint">{field.description}</span>}
       <FieldInput field={field} value={value} onChange={onChange} />
       {field.type === "check" && (
-        <CheckField
-          field={field}
-          suiteId={suiteId}
-          environmentId={environmentId}
-          values={values}
-        />
+        <CheckField field={field} suiteId={suiteId} values={values} />
       )}
       {error && <span className="error">{error}</span>}
     </div>
@@ -203,12 +193,10 @@ function FieldInput({
 function CheckField({
   field,
   suiteId,
-  environmentId,
   values,
 }: {
   field: PrerequisiteField;
   suiteId: string;
-  environmentId: string;
   values: Record<string, unknown>;
 }) {
   const runCheck = useRunCheck();
@@ -220,9 +208,7 @@ function CheckField({
         type="button"
         className="btn"
         disabled={runCheck.isPending}
-        onClick={() =>
-          runCheck.mutate({ field_id: field.id, suite_id: suiteId, environment_id: environmentId, values })
-        }
+        onClick={() => runCheck.mutate({ field_id: field.id, suite_id: suiteId, values })}
       >
         {runCheck.isPending ? "Checking…" : "Run check"}
       </button>

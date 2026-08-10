@@ -10,8 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.core.enums import RunStatus, ValidationStatus
 from app.core.errors import ApiError
-from app.environments.matcher import evaluate_compatibility
-from app.environments.service import get_environment
 from app.git.validators import validate_full_name, validate_ref, validate_sha
 from app.prerequisites.models import PrerequisiteInstance
 from app.prerequisites.service import validate as validate_prerequisites
@@ -26,19 +24,9 @@ logger = logging.getLogger("drivetest.runs.service")
 
 def create_run(db: Session, user_id: str, payload: CreateRunRequest) -> RunOut:
     suite = get_suite(db, payload.suite_id)
-    env = get_environment(db, payload.environment_id)
-
-    compatible, reasons = evaluate_compatibility(suite, env)
-    if not compatible:
-        raise ApiError(
-            code="ENVIRONMENT_INCOMPATIBLE",
-            message="Environment is not compatible with this suite.",
-            status_code=400,
-            details=reasons,
-        )
 
     # Backend re-validates prerequisites; block execution if invalid (spec 4).
-    validation = validate_prerequisites(db, payload.suite_id, payload.environment_id, payload.values)
+    validation = validate_prerequisites(db, payload.suite_id, payload.values)
     if validation.status != ValidationStatus.VALID.value:
         raise ApiError(
             code="PREREQUISITES_INVALID",
@@ -53,7 +41,6 @@ def create_run(db: Session, user_id: str, payload: CreateRunRequest) -> RunOut:
 
     run = Run(
         suite_id=payload.suite_id,
-        environment_id=payload.environment_id,
         user_id=user_id,
         repository=repository,
         branch=branch,
@@ -79,7 +66,7 @@ def create_run(db: Session, user_id: str, payload: CreateRunRequest) -> RunOut:
     db.refresh(run)
 
     start_run_async(run.id)
-    logger.info("run_created run_id=%s suite=%s env=%s", run.id, payload.suite_id, payload.environment_id)
+    logger.info("run_created run_id=%s suite=%s", run.id, payload.suite_id)
     return RunOut.model_validate(run)
 
 

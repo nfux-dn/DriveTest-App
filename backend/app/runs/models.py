@@ -16,7 +16,6 @@ class Run(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=uuid_str)
     suite_id: Mapped[str] = mapped_column(String, ForeignKey("suites.id"), nullable=False)
-    environment_id: Mapped[str] = mapped_column(String, ForeignKey("environments.id"), nullable=False)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     repository: Mapped[str | None] = mapped_column(String, nullable=True)
     branch: Mapped[str | None] = mapped_column(String, nullable=True)
