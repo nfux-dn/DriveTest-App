@@ -10,6 +10,7 @@ returns immediately. ai_verdict/final_verdict are populated in later phases.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -190,7 +191,7 @@ def _run_one_test(
     # AI review runs for every successfully executed test (spec section 6). For
     # non-COMPLETED executions AI does not produce a product verdict (spec 8).
     if outcome.execution_status == ExecutionStatus.COMPLETED:
-        _evaluate_with_ai(db, run, test_dir, tr, outcome, settings)
+        _evaluate_with_ai(db, run, test_dir, tr, outcome, settings, session_text)
 
     logger.info(
         "test_stored run_id=%s test_id=%s status=%s test_verdict=%s ai_verdict=%s final=%s",
@@ -203,10 +204,23 @@ def _run_one_test(
     )
 
 
-def _evaluate_with_ai(db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome, settings) -> None:
+def _evaluate_with_ai(
+    db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome, settings, session_text: str
+) -> None:
     meta = _load_test_metadata(test_dir)
     result = outcome.result_json or {}
     limit = settings.ai_max_log_excerpt_bytes
+
+    # The files the AI reviews against the expected results (spec section 21).
+    files: dict[str, str] = {}
+    if session_text:
+        files["ssh_session"] = session_text[:limit]
+    if outcome.stdout:
+        files["stdout"] = outcome.stdout[:limit]
+    if outcome.stderr:
+        files["stderr"] = outcome.stderr[:limit]
+    if outcome.result_json is not None:
+        files["result.json"] = json.dumps(outcome.result_json, indent=2)[:limit]
 
     request = AiRequest(
         test_id=tr.test_id,
@@ -219,8 +233,7 @@ def _evaluate_with_ai(db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome
         observations=result.get("observations", []) or [],
         evidence=result.get("evidence", []) or [],
         artifacts=result.get("artifacts", []) or [],
-        stdout_excerpt=(outcome.stdout or "")[:limit] or None,
-        stderr_excerpt=(outcome.stderr or "")[:limit] or None,
+        files=files,
     )
 
     evaluator = get_evaluator(settings)

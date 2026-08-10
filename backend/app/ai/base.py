@@ -28,9 +28,9 @@ class AiRequest(BaseModel):
     observations: list[str] = []
     evidence: list[Any] = []
     artifacts: list[str] = []
-    # Selected, size-limited log excerpts (spec 21).
-    stdout_excerpt: str | None = None
-    stderr_excerpt: str | None = None
+    # The files gathered during the run (spec 21): the AI reviews THESE against the
+    # expected results, e.g. {"ssh_session": "...", "stdout": "...", "result.json": "..."}.
+    files: dict[str, str] = {}
     # Platform/system metadata.
     platform: str | None = None
     system_type: str | None = None

@@ -36,6 +36,27 @@ def test_mock_no_evidence_is_inconclusive() -> None:
     assert result.ai_verdict == AiVerdict.INCONCLUSIVE
 
 
+def test_mock_fails_on_error_signature_in_files() -> None:
+    req = AiRequest(
+        test_id="cfg",
+        test_verdict=None,
+        files={"ssh_session": "[dut] $ set interfaces ge0 description x\nERROR: invalid interface"},
+    )
+    result = MockEvaluator().evaluate(req)
+    assert result.ai_verdict == AiVerdict.FAILED
+    assert result.anomalies
+
+
+def test_mock_passes_when_files_clean() -> None:
+    req = AiRequest(
+        test_id="show",
+        test_verdict="PASSED",
+        files={"ssh_session": "[dut] $ show interfaces description\nok"},
+    )
+    result = MockEvaluator().evaluate(req)
+    assert result.ai_verdict == AiVerdict.PASSED
+
+
 def test_parse_valid_json() -> None:
     raw = '{"ai_verdict":"PASSED","confidence":0.9,"summary":"ok"}'
     result = parse_ai_result(raw, test_verdict="PASSED")

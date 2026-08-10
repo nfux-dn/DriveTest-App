@@ -16,13 +16,14 @@ PROMPT_VERSION = "1.0.0"
 POLICY_VERSION = "1.0.0"
 
 SYSTEM_PROMPT = (
-    "You are evaluating network equipment test evidence. Follow these rules strictly:\n"
-    "1. You are evaluating network test evidence, acting as a senior network validation engineer.\n"
-    "2. Use ONLY the supplied evidence. Do not assume facts that are not present.\n"
-    "3. Do not invent missing measurements.\n"
-    "4. If the evidence is insufficient to decide, return verdict INCONCLUSIVE.\n"
-    "5. Explain exactly why you reached the verdict.\n"
-    "6. Cite evidence from the supplied result/logs in the evidence array.\n"
+    "You are a senior network validation engineer reviewing a completed test. Follow these rules strictly:\n"
+    "1. Review the FILES gathered during the run (device session transcript, stdout, stderr, result.json)\n"
+    "   and compare them against the EXPECTED RESULTS for the test. Base your verdict on that comparison.\n"
+    "2. Use ONLY the supplied files/evidence. Do not assume facts that are not present.\n"
+    "3. Do not invent missing data.\n"
+    "4. If the files are insufficient to decide, return verdict INCONCLUSIVE.\n"
+    "5. Explain exactly why you reached the verdict, citing what you saw in the files.\n"
+    "6. Cite concrete evidence from the supplied files in the evidence array.\n"
     "7. Never override a deterministic FAIL: if the test itself reported FAILED, you must not return PASSED.\n"
     "8. Output ONLY a single JSON object matching the required schema, with no extra text.\n\n"
     "Required JSON schema (keys and value types):\n"
@@ -40,21 +41,26 @@ SYSTEM_PROMPT = (
 
 
 def build_user_content(request: AiRequest) -> str:
-    """Serialize the curated request into the user message."""
+    """Serialize the curated request into the user message.
+
+    The AI reviews `files_gathered_during_run` against `expected_results`. The
+    test's own reported result is included for context only (and to enforce the
+    never-override-a-FAIL rule).
+    """
     payload = {
         "test_id": request.test_id,
-        "test_name": request.test_name,
-        "description": request.description,
-        "expected_behavior": request.expected_behavior,
-        "evaluation_instructions": request.evaluation_instructions,
-        "deterministic_test_verdict": request.test_verdict,
-        "measurements": request.measurements,
-        "observations": request.observations,
-        "evidence": request.evidence,
-        "artifacts": request.artifacts,
-        "logs": {
-            "stdout_excerpt": request.stdout_excerpt,
-            "stderr_excerpt": request.stderr_excerpt,
+        "expected_results": {
+            "description": request.description,
+            "expected_behavior": request.expected_behavior,
+            "evaluation_instructions": request.evaluation_instructions,
+        },
+        "files_gathered_during_run": request.files,
+        "the_test_also_reported": {
+            "deterministic_test_verdict": request.test_verdict,
+            "measurements": request.measurements,
+            "observations": request.observations,
+            "evidence": request.evidence,
+            "artifacts": request.artifacts,
         },
         "environment": {
             "platform": request.platform,
@@ -63,6 +69,7 @@ def build_user_content(request: AiRequest) -> str:
         },
     }
     return (
-        "Evaluate the following test evidence and return the JSON verdict object.\n\n"
+        "Review the files gathered during the run and compare them against the expected "
+        "results, then return the JSON verdict object.\n\n"
         + json.dumps(payload, indent=2, default=str)
     )
