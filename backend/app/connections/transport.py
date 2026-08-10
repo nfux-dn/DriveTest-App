@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.connections.devices import DeviceSpec
@@ -20,12 +21,28 @@ from app.connections.devices import DeviceSpec
 logger = logging.getLogger("drivetest.connections.transport")
 
 
+@dataclass
+class ExecResult:
+    """Outcome of running one command on a device.
+
+    `output` is the cleaned device output (echo + prompt stripped) used by tests.
+    `raw` is the verbatim terminal text (device prompt with hostname + echoed
+    command + output) so the session transcript reads like a real CLI session.
+    """
+
+    status: int
+    output: str
+    raw: str
+
+
 class Transport(Protocol):
     name: str
 
     def open(self, spec: DeviceSpec, password: str | None) -> Any: ...
 
-    def exec(self, client: Any, command: str, timeout: float) -> tuple[int, str]: ...
+    def exec(self, client: Any, command: str, timeout: float) -> ExecResult: ...
+
+    def banner(self, client: Any) -> str: ...
 
     def alive(self, client: Any) -> bool: ...
 
@@ -56,6 +73,7 @@ class SimulatedDnosDevice:
 
     def __init__(self, spec: DeviceSpec) -> None:
         self.spec = spec
+        self.hostname = (spec.host or "DUT").split(".")[0]
         self.interfaces = list(_DEFAULT_INTERFACES)
         self.running: dict[str, str] = {name: "" for name in self.interfaces}
         self.candidate: dict[str, str] | None = None
@@ -65,6 +83,12 @@ class SimulatedDnosDevice:
         self._current_iface: str | None = None
 
     # -- helpers -----------------------------------------------------------
+    def prompt(self) -> str:
+        """A DNOS-style prompt reflecting the current mode, e.g. `host#`."""
+        if self.mode == "config":
+            return f"{self.hostname}(config)# "
+        return f"{self.hostname}# "
+
     def _ensure_candidate(self) -> dict[str, str]:
         if self.candidate is None:
             self.candidate = dict(self.running)
@@ -173,8 +197,17 @@ class SimulatedTransport:
         logger.info("sim_open role=%s host=%s", spec.role, spec.host)
         return SimulatedDnosDevice(spec)
 
-    def exec(self, client: Any, command: str, timeout: float) -> tuple[int, str]:
-        return 0, client.handle(command)
+    def exec(self, client: Any, command: str, timeout: float) -> ExecResult:
+        # Capture the prompt as it is BEFORE the command runs (that's where the
+        # user "typed" it), then render a realistic terminal exchange.
+        prompt = client.prompt()
+        output = client.handle(command)
+        raw = f"{prompt}{command}\n{output}"
+        return ExecResult(0, output, raw)
+
+    def banner(self, client: Any) -> str:
+        # The initial login line a real device prints before the first command.
+        return f"Connected to {client.hostname} (simulated DNOS).\n"
 
     def alive(self, client: Any) -> bool:
         return isinstance(client, SimulatedDnosDevice)
@@ -220,15 +253,22 @@ class SshTransport:
         )
         chan = client.invoke_shell(width=200, height=1000)
         session = {"client": client, "chan": chan}
-        # Drain the login banner / first prompt.
-        self._read_until_prompt(chan, timeout=self._connect_timeout)
+        # Drain the login banner / first prompt and keep it verbatim so the
+        # transcript starts like a real session (hostname prompt included).
+        session["banner"] = self._read_until_prompt(chan, timeout=self._connect_timeout)
         return session
 
-    def exec(self, client: Any, command: str, timeout: float) -> tuple[int, str]:
+    def exec(self, client: Any, command: str, timeout: float) -> ExecResult:
         chan = client["chan"]
         chan.send(command + "\n")
-        output = self._read_until_prompt(chan, timeout=timeout)
-        return 0, _strip_echo_and_prompt(output, command)
+        buf = self._read_until_prompt(chan, timeout=timeout)
+        # `buf` is the raw terminal exchange: echoed command + output + the next
+        # prompt (with hostname). Keep it verbatim for the transcript; hand tests
+        # a cleaned version with the echo/prompt removed.
+        return ExecResult(0, _strip_echo_and_prompt(buf, command), buf)
+
+    def banner(self, client: Any) -> str:
+        return client.get("banner", "")
 
     def alive(self, client: Any) -> bool:
         try:

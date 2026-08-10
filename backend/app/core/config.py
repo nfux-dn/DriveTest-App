@@ -32,9 +32,26 @@ class Settings(BaseSettings):
     # CORS: comma-separated list of allowed frontend origins.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
-    # Where suite/environment/prerequisite definitions are loaded from (dev seed).
-    # See plan open-decision D5.
+    # Suite/test source of truth.
+    #   "git"   -> the catalog is indexed from a Git repo (single source of truth)
+    #              and runs execute the same repo at a pinned commit.
+    #   "local" -> dev mode: use the local `definitions_dir` for both catalog and
+    #              execution (fast local iteration, works offline).
+    definitions_source: str = "git"  # git | local
+
+    # The suites Git repository (used in "git" mode for both indexing and runs).
+    suites_repository: str = "nfux-dn/DriveTest-Scripts"
+    suites_branch: str = "main"
+    # Optional system token so startup indexing works for a private suites repo
+    # without a logged-in user. Users can also Sync with their own GitHub token.
+    suites_git_token: str = ""
+
+    # Local definitions dir (dev-mode catalog + the bind-mounted source you edit).
     definitions_dir: str = "/app/definitions"
+    # Where the suites repo is cloned/cached in "git" mode. Backed by a volume so it
+    # survives restarts. All catalog readers (README, prerequisite form) read from
+    # the active definitions path (this in git mode, definitions_dir in local mode).
+    suites_cache_dir: str = "/var/lib/drivetest/suites"
 
     # Root directory for per-run isolated workspaces (spec section 18).
     workspaces_dir: str = "/tmp/drivetest-workspaces"
@@ -53,8 +70,12 @@ class Settings(BaseSettings):
     ai_provider: str = "mock"  # mock | openai | anthropic
     ai_max_retries: int = 2
     ai_request_timeout_seconds: float = 60.0
-    # Max bytes of stdout/stderr excerpt included in an AI request (spec 21).
-    ai_max_log_excerpt_bytes: int = 8000
+    # Max bytes of each log file (session transcript, stdout, stderr) included in an
+    # AI request (spec 21). 0 means UNLIMITED: send the whole log. The decisive
+    # evidence in a device transcript (post-commit / post-rollback snapshots) lives
+    # at the END, so truncating risks dropping it. If a positive cap is ever set,
+    # _excerpt keeps the head AND tail rather than a head-only slice.
+    ai_max_log_excerpt_bytes: int = 0
 
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
@@ -93,6 +114,21 @@ class Settings(BaseSettings):
 
     @property
     def definitions_path(self) -> Path:
+        return Path(self.definitions_dir)
+
+    @property
+    def suites_cache_path(self) -> Path:
+        return Path(self.suites_cache_dir)
+
+    @property
+    def active_definitions_path(self) -> Path:
+        """The directory catalog readers use for READMEs and prerequisite forms.
+
+        In git mode this is the cloned suites cache; in local mode the bind-mounted
+        definitions dir.
+        """
+        if self.definitions_source == "git":
+            return Path(self.suites_cache_dir)
         return Path(self.definitions_dir)
 
     @property

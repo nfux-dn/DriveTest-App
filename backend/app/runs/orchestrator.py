@@ -139,7 +139,12 @@ def _resolve_source(db, run: Run, workspace: Workspace) -> Path:
     """Return the directory that contains suites/<id>/tests/... for execution."""
     settings = get_settings()
     if run.repository and run.branch:
-        token = git_service.reveal_token(db, run.user_id)
+        # Prefer the run owner's GitHub token; fall back to the system token (or
+        # none, for a public repo) so runs work even without a per-user connection.
+        try:
+            token = git_service.reveal_token(db, run.user_id)
+        except ApiError:
+            token = settings.suites_git_token or ""
         commit_sha = fetch_revision(
             repo_dir=workspace.repo,
             full_name=run.repository,
@@ -149,10 +154,14 @@ def _resolve_source(db, run: Run, workspace: Workspace) -> Path:
         )
         run.commit_sha = commit_sha
         db.commit()
+        logger.info(
+            "run_using_git run_id=%s repo=%s branch=%s commit=%s",
+            run.id, run.repository, run.branch, commit_sha,
+        )
         return workspace.repo
-    # Dev fallback: run tests straight from the local definitions source.
+    # Local dev mode: run tests straight from the local definitions source.
     logger.info("run_using_local_definitions run_id=%s", run.id)
-    return settings.definitions_path
+    return settings.active_definitions_path
 
 
 def _run_one_test(
@@ -216,11 +225,11 @@ def _evaluate_with_ai(
     # stdout/stderr, and any other log files the run produced.
     files: dict[str, str] = {}
     if session_text:
-        files["session.txt"] = session_text[:limit]
+        files["session.txt"] = _excerpt(session_text, limit)
     if outcome.stdout:
-        files["stdout"] = outcome.stdout[:limit]
+        files["stdout"] = _excerpt(outcome.stdout, limit)
     if outcome.stderr:
-        files["stderr"] = outcome.stderr[:limit]
+        files["stderr"] = _excerpt(outcome.stderr, limit)
     for name, content in _gather_extra_logs(workspace, tr.test_id, limit).items():
         files.setdefault(name, content)
 
@@ -359,6 +368,27 @@ def _persist_logs(db, workspace: Workspace, tr: TestRun, outcome: ExecOutcome, s
     db.commit()
 
 
+def _excerpt(text: str, limit: int) -> str:
+    """Bound a log for the AI request without discarding end-of-run evidence.
+
+    `limit <= 0` means unlimited (send the whole log). Otherwise, rather than a
+    naive head slice (text[:limit]) — which drops everything after the first `limit`
+    bytes, fatal for device transcripts where the decisive proof (post-commit and
+    post-rollback snapshots) is at the END — we keep the head AND tail with a clear
+    elision marker in between.
+    """
+    if limit <= 0 or len(text) <= limit:
+        return text
+    marker = "\n\n... [transcript truncated: {} bytes omitted] ...\n\n"
+    # Reserve room for the marker, then split the budget head/tail (tail favored so
+    # final verification output is always present).
+    budget = max(0, limit - 120)
+    head_len = budget // 3
+    tail_len = budget - head_len
+    omitted = len(text) - head_len - tail_len
+    return text[:head_len] + marker.format(omitted) + text[len(text) - tail_len:]
+
+
 # Standard logs handled explicitly by the AI request; result.json is the script's
 # self-report and is deliberately excluded from AI evidence.
 _STANDARD_LOG_SUFFIXES = (".stdout.txt", ".stderr.txt", ".session.txt")
@@ -392,5 +422,5 @@ def _gather_extra_logs(workspace: Workspace, test_id: str, limit: int) -> dict[s
             except OSError:
                 continue
             if content.strip():
-                extra[name] = content[:limit]
+                extra[name] = _excerpt(content, limit)
     return extra

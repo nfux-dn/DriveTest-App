@@ -26,7 +26,7 @@ from app.suites.service import get_suite
 
 def resolve_for(db: Session, suite_id: str) -> PrerequisiteTemplate:
     suite = get_suite(db, suite_id)  # ensures the suite exists
-    definitions_dir = get_settings().definitions_path
+    definitions_dir = get_settings().active_definitions_path
     source = suite.source_path or f"suites/{suite_id}"
     prereq_file = Path(definitions_dir) / source / "prerequisites.yaml"
     return resolve_template(prereq_file, suite_id=suite_id)

@@ -20,6 +20,7 @@ import type {
   RunReport,
   Suite,
   SuiteReadme,
+  SuiteSyncResult,
   TestRunDetail,
   User,
   ValidateResponse,
@@ -60,6 +61,14 @@ export function useLogout() {
 
 export function useSuites(): UseQueryResult<Suite[]> {
   return useQuery({ queryKey: ["suites"], queryFn: () => api.get<Suite[]>("/api/suites") });
+}
+
+export function useSyncSuites() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<SuiteSyncResult>("/api/suites/sync"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["suites"] }),
+  });
 }
 
 export function useSuiteReadme(suiteId: string | null): UseQueryResult<SuiteReadme> {

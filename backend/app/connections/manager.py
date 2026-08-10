@@ -54,8 +54,11 @@ class ConnectionManager:
         self._reconnect_attempts = max(0, reconnect_attempts)
         self._context = context or {}
         self._connections: dict[str, _DeviceConnection] = {}
-        # Ordered, credential-masked record of every command + output (for artifacts).
+        # Ordered, credential-masked raw terminal chunks (for the session artifact).
+        # Chunks are concatenated verbatim so the transcript reads like a real CLI
+        # session (device prompts, hostname, echoed commands, and output).
         self._transcript: list[str] = []
+        self._last_role: str | None = None
 
     @property
     def roles(self) -> list[str]:
@@ -65,11 +68,22 @@ class ConnectionManager:
         return len(self._transcript)
 
     def transcript_since(self, start: int) -> str:
-        return "\n".join(self._transcript[start:])
+        # Verbatim concatenation preserves the real terminal layout.
+        return "".join(self._transcript[start:])
 
-    def _record(self, role: str, command: str, output: str) -> None:
-        entry = f"[{role}] $ {command}\n{output}".rstrip()
-        self._transcript.append(entry)
+    def _record_raw(self, role: str, raw: str) -> None:
+        if not raw:
+            return
+        # When more than one device is in play, mark which session a chunk belongs
+        # to so a multi-device transcript stays readable. Single-device runs get no
+        # synthetic prefixes and read exactly like a real CLI session.
+        if len(self._connections) > 1 and role != self._last_role:
+            conn = self._connections.get(role)
+            host = conn.spec.host if conn else role
+            self._transcript.append(f"\n===== session: {role} ({host}) =====\n")
+        self._last_role = role
+        chunk = raw if raw.endswith("\n") else raw + "\n"
+        self._transcript.append(chunk)
 
     def establish(self, specs: list[DeviceSpec], secret_resolver: SecretResolver | None) -> None:
         for spec in specs:
@@ -87,6 +101,15 @@ class ConnectionManager:
                 )
                 raise ConnectionError(f"Failed to connect to device '{spec.role}'.") from exc
             self._connections[spec.role] = _DeviceConnection(spec=spec, client=client, password=password)
+            # Record the login banner / first prompt so the transcript starts like
+            # a real session (hostname prompt visible).
+            secrets = [password] if password else []
+            try:
+                banner = self._transport.banner(client)
+            except Exception:  # noqa: BLE001 - banner is best-effort
+                banner = ""
+            if banner:
+                self._record_raw(spec.role, _mask(banner, secrets))
             logger.info(
                 "connection_established role=%s host=%s transport=%s %s",
                 spec.role,
@@ -102,12 +125,11 @@ class ConnectionManager:
         masked_command = _mask(command, secrets)
         logger.info("device_exec role=%s command=%s %s", role, masked_command, self._ctx())
         try:
-            _status, output = self._transport.exec(conn.client, command, self._command_timeout)
+            result = self._transport.exec(conn.client, command, self._command_timeout)
         except Exception as exc:  # noqa: BLE001
             raise ConnectionError(f"Command execution failed on '{role}'.") from exc
-        masked_output = _mask(output, secrets)
-        self._record(role, masked_command, masked_output)
-        return masked_output
+        self._record_raw(role, _mask(result.raw, secrets))
+        return _mask(result.output, secrets)
 
     def configure(self, role: str, commands: list[str]) -> str:
         conn = self._require(role)
@@ -118,12 +140,11 @@ class ConnectionManager:
             masked_command = _mask(command, secrets)
             logger.info("device_config role=%s command=%s %s", role, masked_command, self._ctx())
             try:
-                _status, output = self._transport.exec(conn.client, command, self._command_timeout)
+                result = self._transport.exec(conn.client, command, self._command_timeout)
             except Exception as exc:  # noqa: BLE001
                 raise ConnectionError(f"Configuration failed on '{role}'.") from exc
-            masked_output = _mask(output, secrets)
-            self._record(role, masked_command, masked_output)
-            outputs.append(output)
+            self._record_raw(role, _mask(result.raw, secrets))
+            outputs.append(result.output)
         return _mask("\n".join(outputs), secrets)
 
     def close_all(self) -> None:

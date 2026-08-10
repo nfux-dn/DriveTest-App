@@ -12,11 +12,21 @@ export interface Suite {
   name: string;
   description: string | null;
   tests: string[];
+  source_repository: string | null;
+  source_branch: string | null;
+  indexed_commit: string | null;
 }
 
 export interface SuiteReadme {
   suite_id: string;
   markdown: string;
+}
+
+export interface SuiteSyncResult {
+  suites: number;
+  repository: string;
+  branch: string;
+  commit: string;
 }
 
 export type FieldType =

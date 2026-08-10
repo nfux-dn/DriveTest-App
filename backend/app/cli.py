@@ -15,6 +15,7 @@ from app.core.logging import configure_logging
 from app.db.session import SessionLocal
 from app.secrets.store import SecretStore
 from app.suites.loader import load_suites
+from app.suites.sync import SuiteSyncError, sync_suites
 
 logger = logging.getLogger("drivetest.cli")
 
@@ -23,8 +24,21 @@ def cmd_seed() -> None:
     settings = get_settings()
     db = SessionLocal()
     try:
-        suites = load_suites(db, settings.definitions_path)
-        logger.info("seed_complete suites=%d", suites)
+        if settings.definitions_source == "git":
+            # Git single source of truth: index from the suites repo. Uses the
+            # optional system token; best-effort (a private repo without a token
+            # simply leaves the previously cached catalog in place).
+            try:
+                result = sync_suites(db, settings=settings)
+                logger.info(
+                    "seed_complete source=git suites=%d repo=%s commit=%s",
+                    result.suites, result.repository, result.commit,
+                )
+            except SuiteSyncError as exc:
+                logger.warning("seed_git_sync_failed: %s", exc)
+        else:
+            suites = load_suites(db, settings.definitions_path, prune=True)
+            logger.info("seed_complete source=local suites=%d", suites)
     finally:
         db.close()
 

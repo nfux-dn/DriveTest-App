@@ -25,6 +25,15 @@ services:
       DRIVETEST_SESSION_SECRET: ${DRIVETEST_SESSION_SECRET:-dev-insecure-session-secret-change-me}
       DRIVETEST_SECRET_ENCRYPTION_KEY: ${DRIVETEST_SECRET_ENCRYPTION_KEY:-}
       DRIVETEST_CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      # Suite/test source of truth: "git" (index + run from the suites repo) or
+      # "local" (dev: use the bind-mounted ./definitions for both).
+      DRIVETEST_DEFINITIONS_SOURCE: ${DRIVETEST_DEFINITIONS_SOURCE:-git}
+      DRIVETEST_SUITES_REPOSITORY: ${DRIVETEST_SUITES_REPOSITORY:-nfux-dn/DriveTest-Scripts}
+      DRIVETEST_SUITES_BRANCH: ${DRIVETEST_SUITES_BRANCH:-main}
+      # Optional system token so startup indexing works for a private suites repo
+      # without a logged-in user (users can also Sync with their own GitHub token).
+      DRIVETEST_SUITES_GIT_TOKEN: ${DRIVETEST_SUITES_GIT_TOKEN:-}
+      DRIVETEST_SUITES_CACHE_DIR: /var/lib/drivetest/suites
       DRIVETEST_DEFINITIONS_DIR: /app/definitions
       DRIVETEST_WORKSPACES_DIR: /tmp/drivetest-workspaces
       DRIVETEST_GITHUB_CLIENT_ID: ${DRIVETEST_GITHUB_CLIENT_ID:-}
@@ -47,6 +56,8 @@ services:
       - ./definitions:/app/definitions
       # Persist run workspaces/artifacts across backend restarts.
       - workspaces:/tmp/drivetest-workspaces
+      # Cached clone of the suites repo (git mode single source of truth).
+      - suites_cache:/var/lib/drivetest/suites
 
   frontend:
     image: node:20
@@ -64,3 +75,4 @@ services:
 volumes:
   db_data:
   workspaces:
+  suites_cache:

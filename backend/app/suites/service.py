@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.suites.loader import load_suites
 from app.suites.models import Suite
-from app.suites.schemas import SuiteOut, SuiteReadmeOut
+from app.suites.schemas import SuiteOut, SuiteReadmeOut, SuiteSyncOut
+from app.suites.sync import SuiteSyncError, sync_suites
 
 
 def _to_out(suite: Suite) -> SuiteOut:
@@ -19,12 +21,50 @@ def _to_out(suite: Suite) -> SuiteOut:
         name=suite.name,
         description=suite.description,
         tests=suite.tests_json or [],
+        source_repository=suite.source_repository,
+        source_branch=suite.source_branch,
+        indexed_commit=suite.indexed_commit,
     )
 
 
 def list_suites(db: Session) -> list[SuiteOut]:
-    suites = db.scalars(select(Suite).order_by(Suite.name)).all()
+    suites = db.scalars(
+        select(Suite).where(Suite.archived.is_(False)).order_by(Suite.name)
+    ).all()
     return [_to_out(s) for s in suites]
+
+
+def sync_catalog(db: Session, user_id: str) -> SuiteSyncOut:
+    """Re-index the suite catalog.
+
+    In git mode: clone the suites repo (using the caller's GitHub token when
+    connected, else the system token) and index it. In local mode: re-index the
+    bind-mounted definitions dir.
+    """
+    settings = get_settings()
+    if settings.definitions_source == "local":
+        count = load_suites(db, settings.definitions_path, prune=True)
+        return SuiteSyncOut(suites=count, repository="(local)", branch="(local)", commit="")
+
+    # git mode: prefer the caller's token so private repos work per-user.
+    token: str | None = None
+    try:
+        from app.git import service as git_service
+
+        token = git_service.reveal_token(db, user_id)
+    except ApiError:
+        token = None  # no user connection; fall back to system token in sync_suites
+
+    try:
+        result = sync_suites(db, token=token, settings=settings)
+    except SuiteSyncError as exc:
+        raise ApiError(code="SUITE_SYNC_FAILED", message=str(exc), status_code=502) from exc
+    return SuiteSyncOut(
+        suites=result.suites,
+        repository=result.repository,
+        branch=result.branch,
+        commit=result.commit,
+    )
 
 
 def get_suite(db: Session, suite_id: str) -> Suite:
@@ -43,7 +83,7 @@ def get_suite_readme(db: Session, suite_id: str) -> SuiteReadmeOut:
     suite = get_suite(db, suite_id)
     markdown = ""
     if suite.source_path:
-        definitions_dir = get_settings().definitions_path
+        definitions_dir = get_settings().active_definitions_path
         # source_path is relative to the definitions dir; guard against traversal.
         readme = (definitions_dir / suite.source_path / "README.md").resolve()
         try:

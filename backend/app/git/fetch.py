@@ -44,11 +44,13 @@ def fetch_revision(
         commit = validate_sha(commit)
 
     repo_dir.mkdir(parents=True, exist_ok=True)
-    auth_url = f"https://x-access-token:{token}@github.com/{full_name}.git"
     clean_url = f"https://github.com/{full_name}.git"
+    # Use an authenticated URL when we have a token (required for private repos);
+    # otherwise clone anonymously (public repos).
+    clone_url = f"https://x-access-token:{token}@github.com/{full_name}.git" if token else clean_url
 
     logger.info("git_clone repo=%s branch=%s", full_name, branch)
-    result = _run_git(["clone", "--branch", branch, "--depth", "50", auth_url, str(repo_dir)])
+    result = _run_git(["clone", "--branch", branch, "--depth", "50", clone_url, str(repo_dir)])
     if result.returncode != 0:
         # Do not echo stderr verbatim (could contain the URL/token); log generically.
         logger.warning("git_clone_failed repo=%s branch=%s", full_name, branch)

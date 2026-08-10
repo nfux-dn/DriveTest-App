@@ -6,7 +6,7 @@ import pytest
 
 from app.connections.devices import DeviceSpec
 from app.connections.manager import ConnectionError, ConnectionManager
-from app.connections.transport import SimulatedTransport
+from app.connections.transport import ExecResult, SimulatedTransport
 
 
 def _spec(role: str = "dut", secret_reference: str | None = None) -> DeviceSpec:
@@ -38,7 +38,11 @@ def test_credentials_are_masked_in_output() -> None:
             return {"password": password, "open": True}
 
         def exec(self, client, command, timeout):
-            return 0, f"login ok with {client['password']} running {command}"
+            text = f"login ok with {client['password']} running {command}"
+            return ExecResult(0, text, text)
+
+        def banner(self, client):
+            return f"banner with {client['password']}"
 
         def alive(self, client):
             return bool(client.get("open"))

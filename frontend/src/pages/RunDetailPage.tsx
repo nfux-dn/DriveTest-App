@@ -30,7 +30,8 @@ export function RunDetailPage() {
 
       <div className="card">
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))" }}>
-          <Meta label="Git branch" value={r.branch ?? "demo definitions"} />
+          <Meta label="Repository" value={r.repository ?? "local definitions"} />
+          <Meta label="Git branch" value={r.branch ?? "—"} />
           <Meta label="Commit SHA" value={r.commit_sha ? r.commit_sha.slice(0, 12) : "—"} />
           <Meta label="Requested by" value={r.user_id.slice(0, 8)} />
           <Meta label="Started" value={fmt(r.started_at)} />

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.enums import RunStatus, ValidationStatus
 from app.core.errors import ApiError
 from app.git.validators import validate_full_name, validate_ref, validate_sha
@@ -38,6 +39,14 @@ def create_run(db: Session, user_id: str, payload: CreateRunRequest) -> RunOut:
     repository = validate_full_name(payload.repository) if payload.repository else None
     branch = validate_ref(payload.branch) if payload.branch else None
     commit = validate_sha(payload.commit) if payload.commit else None
+
+    # Git single-source-of-truth: when the caller didn't pick an explicit repo, run
+    # the platform suites repo at the latest commit on its branch (resolved and
+    # pinned at launch). In local dev mode we leave these unset (run from disk).
+    settings = get_settings()
+    if repository is None and settings.definitions_source == "git":
+        repository = validate_full_name(settings.suites_repository)
+        branch = validate_ref(branch or settings.suites_branch)
 
     run = Run(
         suite_id=payload.suite_id,

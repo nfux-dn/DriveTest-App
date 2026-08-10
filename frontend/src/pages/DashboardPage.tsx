@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
-import { useRuns } from "../api/queries";
+import { useRuns, useSyncSuites } from "../api/queries";
 import { StatusPill } from "../components/StatusPill";
+import { ApiError } from "../api/client";
 import type { Run } from "../api/types";
 
 export function DashboardPage() {
   const runs = useRuns();
+  const syncSuites = useSyncSuites();
 
   const list = runs.data ?? [];
   const stats = summarize(list);
@@ -13,10 +15,33 @@ export function DashboardPage() {
     <div className="stack">
       <div className="row spread">
         <h1>Dashboard</h1>
-        <Link to="/runs/new" className="btn primary">
-          New Run
-        </Link>
+        <div className="row" style={{ gap: 8 }}>
+          <button
+            className="btn"
+            disabled={syncSuites.isPending}
+            onClick={() => syncSuites.mutate()}
+            title="Re-index the suite catalog from the suites Git repository"
+          >
+            {syncSuites.isPending ? "Syncing…" : "Sync suites"}
+          </button>
+          <Link to="/runs/new" className="btn primary">
+            New Run
+          </Link>
+        </div>
       </div>
+
+      {syncSuites.isSuccess && (
+        <p className="muted" style={{ fontSize: 13 }}>
+          Synced {syncSuites.data.suites} suite(s) from {syncSuites.data.repository}@
+          {syncSuites.data.branch}
+          {syncSuites.data.commit ? ` (${syncSuites.data.commit.slice(0, 8)})` : ""}.
+        </p>
+      )}
+      {syncSuites.isError && (
+        <p className="error" style={{ fontSize: 13 }}>
+          {(syncSuites.error as ApiError).message}
+        </p>
+      )}
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))" }}>
         <Stat label="Total runs" value={list.length} />

@@ -9,7 +9,7 @@ from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.db.session import get_db
 from app.suites import service
-from app.suites.schemas import SuiteOut, SuiteReadmeOut
+from app.suites.schemas import SuiteOut, SuiteReadmeOut, SuiteSyncOut
 
 router = APIRouter(prefix="/api/suites", tags=["suites"])
 
@@ -17,6 +17,12 @@ router = APIRouter(prefix="/api/suites", tags=["suites"])
 @router.get("", response_model=list[SuiteOut])
 def list_suites(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[SuiteOut]:
     return service.list_suites(db)
+
+
+@router.post("/sync", response_model=SuiteSyncOut)
+def sync_suites(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> SuiteSyncOut:
+    """Re-index the suite catalog from the suites Git repository (single source of truth)."""
+    return service.sync_catalog(db, user.id)
 
 
 @router.get("/{suite_id}", response_model=SuiteOut)

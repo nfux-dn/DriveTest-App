@@ -143,10 +143,16 @@ export function NewRunWizard() {
       {step === 2 && (
         <div className="card stack">
           <h3>Git Revision</h3>
+          <p className="muted">
+            By default a run uses the platform suites repository at the latest commit
+            on its branch (resolved and pinned when the run starts). Optionally override
+            the repository/branch/commit below.
+          </p>
           {!connected && (
             <p className="muted">
-              You have not connected GitHub. You can still run using the built-in demo
-              definitions, or connect GitHub from the Git Connection page.
+              You have not connected GitHub, so you can't override the source here. The
+              run will use the platform suites repository. Connect GitHub from the Git
+              Connection page to pin a specific repo/branch/commit.
             </p>
           )}
           {connected && (
@@ -162,7 +168,7 @@ export function NewRunWizard() {
                     setCommit(null);
                   }}
                 >
-                  <option value="">Use built-in demo definitions</option>
+                  <option value="">Use platform suites (latest)</option>
                   {(repos.data ?? []).map((r) => (
                     <option key={r.id} value={r.full_name}>
                       {r.full_name}
@@ -218,7 +224,7 @@ export function NewRunWizard() {
           <SummaryRow label="Suite" value={suiteId} />
           <SummaryRow
             label="Git"
-            value={repository ? `${repository} @ ${branch}${commit ? ` (${commit.slice(0, 8)})` : " (latest)"}` : "Built-in demo definitions"}
+            value={repository ? `${repository} @ ${branch}${commit ? ` (${commit.slice(0, 8)})` : " (latest)"}` : "Platform suites (latest)"}
           />
           <div>
             <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
