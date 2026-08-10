@@ -15,7 +15,6 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
 from sqlalchemy import select
 
 from app.ai.base import AiRequest
@@ -254,16 +253,19 @@ def _evaluate_with_ai(db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome
 
 
 def _load_test_metadata(test_dir: Path) -> dict:
-    """Read optional test.yaml (definition + evaluation instructions, spec 21)."""
-    test_yaml = test_dir / "test.yaml"
-    if not test_yaml.exists():
+    """Read optional evaluation.md (AI evaluation instructions, spec 21).
+
+    The markdown content is passed to the AI reviewer as the evaluation
+    instructions / expected behavior for the test.
+    """
+    evaluation_md = test_dir / "evaluation.md"
+    if not evaluation_md.exists():
         return {}
     try:
-        with test_yaml.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-        return data if isinstance(data, dict) else {}
-    except (OSError, yaml.YAMLError):
+        text = evaluation_md.read_text(encoding="utf-8").strip()
+    except OSError:
         return {}
+    return {"evaluation_instructions": text, "expected_behavior": text}
 
 
 def _run_values(db, run: Run) -> dict:

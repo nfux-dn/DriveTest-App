@@ -1,6 +1,17 @@
-id: demo_shaping_common
-version: 1
+# Merged suite file (spec section 9): suite definition + device/prerequisite form.
 
+id: demo_shaping
+name: Demo Shaping Suite
+description: Demonstration suite validating PWHE shaping behavior end-to-end.
+
+tests:
+  - device_facts
+  - basic_pass
+  - ai_anomaly
+  - ai_judged
+  - script_error
+
+version: 1
 sections:
 
   - id: connectivity

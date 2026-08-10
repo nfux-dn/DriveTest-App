@@ -27,7 +27,10 @@ def _read_yaml(path: Path) -> dict:
 
 
 def load_suites(db: Session, definitions_dir: Path) -> int:
-    """Upsert all suites found under definitions_dir/suites/*/suite.yaml.
+    """Upsert all suites found under definitions_dir/suites/*/prerequisites.yaml.
+
+    Each suite has one merged file (suite definition + prerequisite form). This
+    reads the suite definition part (id/name/description/tests).
 
     Returns the number of suites indexed.
     """
@@ -37,19 +40,18 @@ def load_suites(db: Session, definitions_dir: Path) -> int:
         return 0
 
     count = 0
-    for suite_yaml in sorted(suites_root.glob("*/suite.yaml")):
-        data = _read_yaml(suite_yaml)
-        suite_id = data.get("id") or suite_yaml.parent.name
-        requirements = data.get("requirements", {}) or {}
+    for suite_file in sorted(suites_root.glob("*/prerequisites.yaml")):
+        data = _read_yaml(suite_file)
+        suite_id = data.get("id") or suite_file.parent.name
         suite = db.get(Suite, suite_id)
         if suite is None:
             suite = Suite(id=suite_id)
             db.add(suite)
         suite.name = data.get("name", suite_id)
         suite.description = data.get("description")
-        suite.source_path = str(suite_yaml.parent.relative_to(definitions_dir))
-        suite.requirements_json = requirements
-        suite.supported_platforms_json = data.get("supported_platforms", []) or []
+        suite.source_path = str(suite_file.parent.relative_to(definitions_dir))
+        suite.requirements_json = {}
+        suite.supported_platforms_json = []
         suite.tests_json = data.get("tests", []) or []
         count += 1
         logger.info("suite_indexed id=%s tests=%d", suite_id, len(suite.tests_json))

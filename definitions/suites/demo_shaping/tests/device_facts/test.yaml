@@ -1,5 +1,0 @@
-id: device_facts
-name: Device facts via Network API
-description: Collect device version using the Run-owned connection (no direct SSH).
-expected_behavior: The device should return version output over the shared session.
-evaluation_instructions: Pass if version output was returned; fail if the command produced no output.

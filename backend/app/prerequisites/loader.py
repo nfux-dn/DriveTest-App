@@ -1,8 +1,9 @@
 """Resolve a Suite's prerequisite template.
 
-One prerequisite file per suite (spec sections 10-14):
+One merged file per suite holds both the suite definition and the device form
+(spec sections 9-14):
 
-    prerequisites/<suite_id>/common.yaml
+    suites/<suite_id>/prerequisites.yaml
 """
 
 from __future__ import annotations
@@ -27,19 +28,15 @@ def _read_yaml(path: Path) -> dict:
         return yaml.safe_load(fh) or {}
 
 
-def _candidate_files(definitions_dir: Path, suite_id: str) -> list[Path]:
-    base = definitions_dir / "prerequisites" / suite_id
-    return [base / "common.yaml"]
-
-
-def resolve_template(definitions_dir: Path, suite_id: str) -> PrerequisiteTemplate:
-    files = [p for p in _candidate_files(definitions_dir, suite_id) if p.exists()]
-    if not files:
+def resolve_template(prereq_file: Path, suite_id: str) -> PrerequisiteTemplate:
+    """Parse the device form (version + sections) from the merged suite file."""
+    if not prereq_file.exists():
         raise ApiError(
             code="PREREQUISITE_TEMPLATE_NOT_FOUND",
-            message=f"No prerequisite template found for suite '{suite_id}'.",
+            message=f"No prerequisite file found for suite '{suite_id}'.",
             status_code=404,
         )
+    files = [prereq_file]
 
     merged_sections: dict[str, PrerequisiteSection] = {}
     version = 1

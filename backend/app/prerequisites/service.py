@@ -6,6 +6,8 @@ suite. Device details are entered by the user in the Environment tab.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -23,8 +25,11 @@ from app.suites.service import get_suite
 
 
 def resolve_for(db: Session, suite_id: str) -> PrerequisiteTemplate:
-    get_suite(db, suite_id)  # ensures the suite exists
-    return resolve_template(get_settings().definitions_path, suite_id=suite_id)
+    suite = get_suite(db, suite_id)  # ensures the suite exists
+    definitions_dir = get_settings().definitions_path
+    source = suite.source_path or f"suites/{suite_id}"
+    prereq_file = Path(definitions_dir) / source / "prerequisites.yaml"
+    return resolve_template(prereq_file, suite_id=suite_id)
 
 
 def validate(db: Session, suite_id: str, values: dict) -> ValidateResponse:

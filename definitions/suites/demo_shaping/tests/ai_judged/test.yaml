@@ -1,5 +1,0 @@
-id: ai_judged
-name: Complex log analysis
-description: Analyze the routing engine log for anomalies. The test itself does not decide the verdict.
-expected_behavior: No error or crash signatures should appear in the routing engine log during the run.
-evaluation_instructions: Decide PASSED or FAILED based solely on the supplied log evidence; return INCONCLUSIVE if evidence is insufficient.

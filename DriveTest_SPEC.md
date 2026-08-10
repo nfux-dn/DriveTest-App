@@ -355,29 +355,19 @@ Recommended structure:
 network-tests/
 ├── suites/
 │   ├── shaping/
-│   │   ├── suite.yaml
-│   │   ├── README.md
+│   │   ├── prerequisites.yaml     # merged: suite definition + device/prerequisite form
+│   │   ├── README.md              # suite purpose + connectivity scheme
 │   │   └── tests/
 │   │       ├── max_bandwidth/
 │   │       │   ├── test.py
-│   │       │   ├── test.yaml
-│   │       │   └── README.md
+│   │       │   ├── evaluation.md  # AI evaluation instructions
+│   │       │   └── README.md      # optional human notes
 │   │       └── ...
 │   ├── bgp/
 │   ├── mpls/
 │   └── optics/
 │
-├── prerequisites/
-│   ├── shaping/
-│   │   ├── common.yaml
-│   │   ├── platform_a/
-│   │   │   ├── default.yaml
-│   │   │   └── pwhe.yaml
-│   │   └── platform_b/
-│   │       ├── default.yaml
-│   │       └── pwhe.yaml
-│   └── ...
-│
+├── skills/                        # optional: uploaded skills (SKILL.md); not used by the app
 ├── framework/
 │   ├── ssh/
 │   ├── logging/
@@ -388,29 +378,45 @@ network-tests/
 └── schemas/
 ```
 
+Each suite is defined by a single merged `prerequisites.yaml` (suite definition
+plus the device form) and a `README.md`. There is no separate top-level
+`prerequisites/` tree and no platform/system layering.
+
 ---
 
 # 10. Suite definition
 
-A Suite package is a folder containing `suite.yaml`, a `README.md` (purpose +
-connectivity scheme, shown in the Environment tab), a prerequisite file, and the
-tests.
+A Suite package is a folder containing one merged `prerequisites.yaml` (the suite
+definition plus the device/prerequisite form), a `README.md` (purpose +
+connectivity scheme, shown in the Environment tab), and the tests.
 
-Example `suite.yaml`:
+Example `suites/pwhe_shaping/prerequisites.yaml`:
 
 ```yaml
+# suite definition
 id: pwhe_shaping
 name: PWHE Shaping
 description: Validate PWHE shaping behavior.
-
 tests:
   - max_bandwidth
   - high_priority_queue
   - congestion_behavior
+
+# device / prerequisite form
+version: 1
+sections:
+  - id: connectivity
+    title: Connectivity
+    fields:
+      - id: dut_management_ip
+        label: DUT Management IP
+        type: ip
+        required: true
+        device_role: dut
 ```
 
-The device requirements are expressed by the prerequisite file (the `device_role`
-fields the user must fill), not by a compatibility block.
+The device requirements are expressed by the `device_role` fields the user must
+fill, not by a compatibility block.
 
 ---
 
