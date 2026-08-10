@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.base import Evaluator
 from app.ai.mock import MockEvaluator
-from app.ai.providers import AnthropicEvaluator, OpenAIEvaluator
+from app.ai.providers import AnthropicEvaluator, CursorEvaluator, OpenAIEvaluator
 from app.core.config import Settings, get_settings
 
 logger = logging.getLogger("drivetest.ai.factory")
@@ -33,6 +33,12 @@ def get_evaluator(settings: Settings | None = None) -> Evaluator:
             logger.warning("anthropic_key_missing falling_back=mock")
             return MockEvaluator()
         return AnthropicEvaluator(settings)
+
+    if provider == "cursor":
+        if not settings.cursor_api_key:
+            logger.warning("cursor_key_missing falling_back=mock")
+            return MockEvaluator()
+        return CursorEvaluator(settings)
 
     return MockEvaluator()
 
@@ -65,6 +71,14 @@ def get_evaluator_for_user(db: Session, user_id: str, settings: Settings | None 
                 "ai_provider": "anthropic",
                 "anthropic_api_key": key,
                 "anthropic_model": conn.model or settings.anthropic_model,
+            }
+        )
+    elif conn.provider == "cursor":
+        effective = settings.model_copy(
+            update={
+                "ai_provider": "cursor",
+                "cursor_api_key": key,
+                "cursor_model": conn.model or settings.cursor_model,
             }
         )
     else:

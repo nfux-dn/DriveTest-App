@@ -5,6 +5,13 @@ import { ApiError } from "../api/client";
 const MODEL_PLACEHOLDER: Record<string, string> = {
   openai: "gpt-4o-mini (default)",
   anthropic: "claude-3-5-sonnet-latest (default)",
+  cursor: "composer-2.5 (default)",
+};
+
+const KEY_PLACEHOLDER: Record<string, string> = {
+  openai: "sk-…",
+  anthropic: "sk-ant-…",
+  cursor: "cursor_…",
 };
 
 export function AiProviderPage() {
@@ -58,6 +65,7 @@ export function AiProviderPage() {
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
             >
+              <option value="cursor">Cursor</option>
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
             </select>
@@ -69,7 +77,7 @@ export function AiProviderPage() {
               className="input"
               type="password"
               value={apiKey}
-              placeholder={provider === "openai" ? "sk-…" : "sk-ant-…"}
+              placeholder={KEY_PLACEHOLDER[provider] ?? "key…"}
               onChange={(e) => setApiKey(e.target.value)}
             />
           </div>

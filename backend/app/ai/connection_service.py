@@ -17,11 +17,12 @@ from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.secrets.store import SecretStore
 
-SUPPORTED_PROVIDERS = ("openai", "anthropic")
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "cursor")
 
 _DEFAULT_MODEL = {
     "openai": lambda s: s.openai_model,
     "anthropic": lambda s: s.anthropic_model,
+    "cursor": lambda s: s.cursor_model,
 }
 
 

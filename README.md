@@ -184,6 +184,10 @@ Every completed test gets an AI review (spec §6). The reviewer reads the files 
 during the run (device `ssh_session` transcript, `stdout`, `stderr`, `result.json`) and
 compares them against the test's expected results (`evaluation.md`).
 
+**Providers:** OpenAI, Anthropic, and **Cursor** (via the `cursor-sdk` local agent — the key
+is a Cursor user/service API key). Cursor runs a one-shot Composer agent and the platform
+parses its answer as the verdict.
+
 **Per-user keys (recommended):** each user connects their own provider + API key on the
 **AI Provider** page in the app. The key is encrypted at rest (Fernet `SecretStore`, like Git
 tokens) and never returned to the browser, logged, or placed in prompts. Runs are reviewed

@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-3-5-sonnet-latest"
     anthropic_base_url: str = "https://api.anthropic.com/v1"
 
+    # Cursor (via the cursor-sdk local agent). Key is a Cursor user/service API key.
+    cursor_api_key: str = ""
+    cursor_model: str = "composer-2.5"
+
     # SSH / device connections (spec section 51). Connections are owned by the Run
     # and reused by all tests; tests never open SSH themselves.
     ssh_transport: str = "simulated"  # simulated | ssh (paramiko)

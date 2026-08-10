@@ -86,6 +86,57 @@ class OpenAIEvaluator(_HttpEvaluatorBase):
         return data["choices"][0]["message"]["content"]
 
 
+class CursorEvaluator:
+    """Evaluator backed by the Cursor SDK local agent (composer models).
+
+    Runs a one-shot `Agent.prompt` with our system+user content and parses the
+    agent's final text as the JSON verdict. cursor-sdk is imported lazily so the
+    app still works when Cursor isn't the selected provider.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+
+    @property
+    def model(self) -> str:
+        return self._settings.cursor_model
+
+    def evaluate(self, request: AiRequest) -> AiResult:
+        import tempfile
+
+        from cursor_sdk import Agent, AgentOptions, LocalAgentOptions
+
+        prompt = SYSTEM_PROMPT + "\n\n" + build_user_content(request)
+        retries = max(0, self._settings.ai_max_retries)
+        last_error: Exception | None = None
+
+        for attempt in range(retries + 1):
+            try:
+                result = Agent.prompt(
+                    prompt,
+                    AgentOptions(
+                        api_key=self._settings.cursor_api_key,
+                        model=self._settings.cursor_model,
+                        # Empty scratch dir: this is a review task, not a code edit.
+                        local=LocalAgentOptions(cwd=tempfile.mkdtemp(prefix="drivetest-ai-")),
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001 - startup/auth/network failure
+                raise AiResponseError(f"Cursor agent failed to run: {exc}") from exc
+
+            if getattr(result, "status", None) == "error":
+                raise AiResponseError(f"Cursor run errored (id={getattr(result, 'id', None)}).")
+
+            text = getattr(result, "result", None) or ""
+            try:
+                return parse_ai_result(text, request.test_verdict)
+            except AiResponseError as exc:
+                last_error = exc
+                logger.warning("ai_response_invalid attempt=%d model=%s", attempt + 1, self.model)
+
+        raise AiResponseError(f"Cursor AI response invalid after {retries + 1} attempts: {last_error}")
+
+
 class AnthropicEvaluator(_HttpEvaluatorBase):
     @property
     def model(self) -> str:
