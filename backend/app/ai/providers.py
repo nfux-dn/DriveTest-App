@@ -123,7 +123,7 @@ class CursorEvaluator:
         cmd += [prompt]
 
         env = {**os.environ, "CURSOR_API_KEY": self._settings.cursor_api_key}
-        timeout = self._settings.ai_request_timeout_seconds
+        timeout = self._settings.cursor_timeout_seconds
         retries = max(0, self._settings.ai_max_retries)
         last_error: Exception | None = None
 

@@ -16,15 +16,21 @@ PROMPT_VERSION = "1.0.0"
 POLICY_VERSION = "1.0.0"
 
 SYSTEM_PROMPT = (
-    "You are a senior network validation engineer reviewing a completed test. Follow these rules strictly:\n"
-    "1. Review the FILES gathered during the run (device session transcript, stdout, stderr, result.json)\n"
-    "   and compare them against the EXPECTED RESULTS for the test. Base your verdict on that comparison.\n"
-    "2. Use ONLY the supplied files/evidence. Do not assume facts that are not present.\n"
-    "3. Do not invent missing data.\n"
-    "4. If the files are insufficient to decide, return verdict INCONCLUSIVE.\n"
-    "5. Explain exactly why you reached the verdict, citing what you saw in the files.\n"
-    "6. Cite concrete evidence from the supplied files in the evidence array.\n"
-    "7. Never override a deterministic FAIL: if the test itself reported FAILED, you must not return PASSED.\n"
+    "You are a senior network validation engineer independently reviewing a completed test. "
+    "Your job is to reach your OWN verdict from raw evidence, not to trust the script's self-report. "
+    "Follow these rules strictly:\n"
+    "1. Base your verdict ONLY on the INDEPENDENT LOGS gathered during the run: the device session\n"
+    "   transcript (session.txt), stdout, stderr, and any other log files provided. Compare what these\n"
+    "   logs actually show against the EXPECTED RESULTS for the test.\n"
+    "2. The test script's own result.json, its self-reported verdict, and its self-reported measurements\n"
+    "   are NOT evidence. Do NOT use them to justify a PASS, and do NOT simply restate them. You must\n"
+    "   independently confirm the expected behavior in the raw logs themselves.\n"
+    "3. Use ONLY the supplied logs. Do not assume or invent facts that are not present in them.\n"
+    "4. If the logs are insufficient to independently confirm the expected behavior, return INCONCLUSIVE.\n"
+    "5. Explain exactly why you reached the verdict, quoting concrete lines from the logs.\n"
+    "6. Cite concrete evidence from the supplied logs (with the source file name) in the evidence array.\n"
+    "7. Safety guard: never override a deterministic FAIL. A `deterministic_test_verdict` of FAILED is\n"
+    "   provided solely so you never return PASSED in that case; it is not evidence of a pass.\n"
     "8. Output ONLY a single JSON object matching the required schema, with no extra text.\n\n"
     "Required JSON schema (keys and value types):\n"
     "{\n"
@@ -43,9 +49,10 @@ SYSTEM_PROMPT = (
 def build_user_content(request: AiRequest) -> str:
     """Serialize the curated request into the user message.
 
-    The AI reviews `files_gathered_during_run` against `expected_results`. The
-    test's own reported result is included for context only (and to enforce the
-    never-override-a-FAIL rule).
+    The AI reviews `independent_logs` against `expected_results` and must reach its
+    own verdict from those logs. The script's own result.json / measurements are NOT
+    included as evidence. Only `deterministic_test_verdict` is passed, purely to
+    enforce the never-override-a-FAIL safety rule.
     """
     payload = {
         "test_id": request.test_id,
@@ -54,13 +61,13 @@ def build_user_content(request: AiRequest) -> str:
             "expected_behavior": request.expected_behavior,
             "evaluation_instructions": request.evaluation_instructions,
         },
-        "files_gathered_during_run": request.files,
-        "the_test_also_reported": {
+        "independent_logs": request.files,
+        "safety_guard_only": {
             "deterministic_test_verdict": request.test_verdict,
-            "measurements": request.measurements,
-            "observations": request.observations,
-            "evidence": request.evidence,
-            "artifacts": request.artifacts,
+            "note": (
+                "Provided only so you never return PASSED when this is FAILED. "
+                "This is NOT evidence; judge the logs yourself."
+            ),
         },
         "environment": {
             "platform": request.platform,
@@ -69,7 +76,8 @@ def build_user_content(request: AiRequest) -> str:
         },
     }
     return (
-        "Review the files gathered during the run and compare them against the expected "
-        "results, then return the JSON verdict object.\n\n"
+        "Independently review the logs below and compare what they actually show against the "
+        "expected results, then return the JSON verdict object. Do not trust or restate the "
+        "test script's own result.json.\n\n"
         + json.dumps(payload, indent=2, default=str)
     )

@@ -10,7 +10,6 @@ returns immediately. ai_verdict/final_verdict are populated in later phases.
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -191,7 +190,7 @@ def _run_one_test(
     # AI review runs for every successfully executed test (spec section 6). For
     # non-COMPLETED executions AI does not produce a product verdict (spec 8).
     if outcome.execution_status == ExecutionStatus.COMPLETED:
-        _evaluate_with_ai(db, run, test_dir, tr, outcome, settings, session_text)
+        _evaluate_with_ai(db, run, test_dir, tr, outcome, settings, session_text, workspace)
 
     logger.info(
         "test_stored run_id=%s test_id=%s status=%s test_verdict=%s ai_verdict=%s final=%s",
@@ -205,22 +204,25 @@ def _run_one_test(
 
 
 def _evaluate_with_ai(
-    db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome, settings, session_text: str
+    db, run, test_dir: Path, tr: TestRun, outcome: ExecOutcome, settings, session_text: str,
+    workspace: Workspace,
 ) -> None:
     meta = _load_test_metadata(test_dir)
-    result = outcome.result_json or {}
     limit = settings.ai_max_log_excerpt_bytes
 
-    # The files the AI reviews against the expected results (spec section 21).
+    # The AI reviews the INDEPENDENT logs gathered during the run, NOT the script's
+    # own result.json / self-reported measurements (those let it grade its own
+    # homework). It must reach its own verdict from the device session transcript,
+    # stdout/stderr, and any other log files the run produced.
     files: dict[str, str] = {}
     if session_text:
-        files["ssh_session"] = session_text[:limit]
+        files["session.txt"] = session_text[:limit]
     if outcome.stdout:
         files["stdout"] = outcome.stdout[:limit]
     if outcome.stderr:
         files["stderr"] = outcome.stderr[:limit]
-    if outcome.result_json is not None:
-        files["result.json"] = json.dumps(outcome.result_json, indent=2)[:limit]
+    for name, content in _gather_extra_logs(workspace, tr.test_id, limit).items():
+        files.setdefault(name, content)
 
     request = AiRequest(
         test_id=tr.test_id,
@@ -228,11 +230,9 @@ def _evaluate_with_ai(
         description=meta.get("description"),
         expected_behavior=meta.get("expected_behavior"),
         evaluation_instructions=meta.get("evaluation_instructions"),
+        # Passed only to enforce the never-override-a-FAIL safety guard; the prompt
+        # explicitly tells the model this is not evidence.
         test_verdict=tr.test_verdict,
-        measurements=result.get("measurements", {}) or {},
-        observations=result.get("observations", []) or [],
-        evidence=result.get("evidence", []) or [],
-        artifacts=result.get("artifacts", []) or [],
         files=files,
     )
 
@@ -357,3 +357,40 @@ def _persist_logs(db, workspace: Workspace, tr: TestRun, outcome: ExecOutcome, s
             )
         )
     db.commit()
+
+
+# Standard logs handled explicitly by the AI request; result.json is the script's
+# self-report and is deliberately excluded from AI evidence.
+_STANDARD_LOG_SUFFIXES = (".stdout.txt", ".stderr.txt", ".session.txt")
+
+
+def _gather_extra_logs(workspace: Workspace, test_id: str, limit: int) -> dict[str, str]:
+    """Collect any *other* log files the run produced (spec: examine ongoing logs).
+
+    Scans the run's logs/ and artifacts/ dirs for readable text files tied to this
+    test, excluding the standard session/stdout/stderr logs and the script-generated
+    result.json. This lets the AI review additional ongoing logs a test may emit.
+    """
+    extra: dict[str, str] = {}
+    for base in (workspace.logs, workspace.artifacts):
+        if not base.exists():
+            continue
+        for path in sorted(base.iterdir()):
+            if not path.is_file():
+                continue
+            name = path.name
+            if name.endswith(_STANDARD_LOG_SUFFIXES):
+                continue
+            if name.endswith(".result.json") or name == f"{test_id}.result.json":
+                continue
+            # Only include files belonging to this test (by prefix) to avoid pulling
+            # another test's artifacts from the shared per-run artifacts/ directory.
+            if not (name.startswith(f"{test_id}.") or name.startswith(f"{test_id}_")):
+                continue
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if content.strip():
+                extra[name] = content[:limit]
+    return extra

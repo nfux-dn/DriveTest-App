@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # cursor_model is optional; empty means let the CLI pick its default model.
     cursor_api_key: str = ""
     cursor_model: str = ""
+    # Cursor agent runs are slower than a plain chat call; give them their own,
+    # larger timeout (seconds).
+    cursor_timeout_seconds: float = 120.0
 
     # SSH / device connections (spec section 51). Connections are owned by the Run
     # and reused by all tests; tests never open SSH themselves.
