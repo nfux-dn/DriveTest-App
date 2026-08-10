@@ -105,7 +105,8 @@ def list_artifacts(db: Session, test_run_id: str) -> list[ArtifactOut]:
     if db.get(TestRun, test_run_id) is None:
         raise ApiError(code="TEST_RUN_NOT_FOUND", message="Test run not found.", status_code=404)
     rows = db.scalars(select(Artifact).where(Artifact.test_run_id == test_run_id)).all()
-    return [ArtifactOut.model_validate(a) for a in rows]
+    # Hide empty files (e.g. stdout/stderr with no output) from the listing.
+    return [ArtifactOut.model_validate(a) for a in rows if (a.size or 0) > 0]
 
 
 def _safe_artifact_path(path_or_key: str) -> Path:
@@ -141,6 +142,8 @@ def bundle_artifacts(db: Session, test_run_id: str) -> tuple[bytes, str]:
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         seen: set[str] = set()
         for artifact in rows:
+            if (artifact.size or 0) == 0:
+                continue  # skip empty files (consistent with the listing)
             try:
                 path = _safe_artifact_path(artifact.path_or_object_key)
             except ApiError:
