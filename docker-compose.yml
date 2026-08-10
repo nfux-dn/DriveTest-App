@@ -42,6 +42,8 @@ services:
     volumes:
       - ./backend:/app
       - ./definitions:/app/definitions
+      # Persist run workspaces/artifacts across backend restarts.
+      - workspaces:/tmp/drivetest-workspaces
 
   frontend:
     image: node:20
@@ -58,3 +60,4 @@ services:
 
 volumes:
   db_data:
+  workspaces:
