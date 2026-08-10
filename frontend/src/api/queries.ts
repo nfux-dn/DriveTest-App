@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { api } from "./client";
 import type {
+  Artifact,
   Branch,
   CheckRunResponse,
   Commit,
@@ -193,6 +194,17 @@ export function useTestRunDetail(
   return useQuery({
     queryKey: ["test-run", testRunId],
     queryFn: () => api.get<TestRunDetail>(`/api/test-runs/${testRunId}`),
+    enabled: enabled && !!testRunId,
+  });
+}
+
+export function useArtifacts(
+  testRunId: string | null,
+  enabled: boolean,
+): UseQueryResult<Artifact[]> {
+  return useQuery({
+    queryKey: ["artifacts", testRunId],
+    queryFn: () => api.get<Artifact[]>(`/api/test-runs/${testRunId}/artifacts`),
     enabled: enabled && !!testRunId,
   });
 }

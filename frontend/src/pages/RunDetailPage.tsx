@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useRunDetail, useRunReport, useTestRunDetail } from "../api/queries";
+import { useArtifacts, useRunDetail, useRunReport, useTestRunDetail } from "../api/queries";
+import { downloadFile } from "../api/client";
 import { StatusPill } from "../components/StatusPill";
-import type { AiEvaluation, RunReport, TestRun } from "../api/types";
+import type { AiEvaluation, Artifact, RunReport, TestRun } from "../api/types";
 
 export function RunDetailPage() {
   const { runId } = useParams();
@@ -81,6 +82,7 @@ function Summary({ report }: { report: RunReport }) {
 function TestRow({ test }: { test: TestRun }) {
   const [open, setOpen] = useState(false);
   const detail = useTestRunDetail(test.id, open);
+  const artifacts = useArtifacts(test.id, open);
   const result = test.result_json as Record<string, unknown> | null;
   const disagreement =
     test.test_verdict != null &&
@@ -147,6 +149,51 @@ function TestRow({ test }: { test: TestRun }) {
               No AI review (execution did not complete successfully).
             </p>
           )}
+
+          <FilesSection testRunId={test.id} artifacts={artifacts.data ?? []} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Every file gathered for the test (SSH session log, stdout, stderr, result), with
+// per-file and "download all" (zip) download.
+function FilesSection({ testRunId, artifacts }: { testRunId: string; artifacts: Artifact[] }) {
+  const basename = (p: string) => p.split("/").pop() ?? p;
+  const size = (n: number | null) => (n == null ? "" : `${(n / 1024).toFixed(1)} KB`);
+
+  const downloadAll = () =>
+    void downloadFile(`/api/test-runs/${testRunId}/artifacts/download`, "files.zip");
+  const downloadOne = (a: Artifact) =>
+    void downloadFile(`/api/test-runs/${testRunId}/artifacts/${a.id}/download`, basename(a.path_or_object_key));
+
+  return (
+    <div>
+      <div className="row spread">
+        <h3 style={{ margin: 0 }}>Files</h3>
+        <button className="btn" disabled={artifacts.length === 0} onClick={downloadAll}>
+          Download all files
+        </button>
+      </div>
+      {artifacts.length === 0 ? (
+        <p className="muted" style={{ fontSize: 13 }}>No files gathered.</p>
+      ) : (
+        <div className="stack" style={{ gap: 6, marginTop: 8 }}>
+          {artifacts.map((a) => (
+            <div key={a.id} className="row spread" style={{ fontSize: 13 }}>
+              <span>
+                <span className="pill completed" style={{ padding: "1px 8px", marginRight: 8 }}>
+                  {a.artifact_type}
+                </span>
+                {basename(a.path_or_object_key)}
+                <span className="muted" style={{ marginLeft: 8 }}>{size(a.size)}</span>
+              </span>
+              <button className="btn" onClick={() => downloadOne(a)}>
+                Download
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

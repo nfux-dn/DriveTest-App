@@ -171,6 +171,14 @@ export interface TestRunDetail extends TestRun {
   ai: AiEvaluation | null;
 }
 
+export interface Artifact {
+  id: string;
+  artifact_type: string;
+  path_or_object_key: string;
+  size: number | null;
+  created_at: string;
+}
+
 export interface RunReport {
   run_id: string;
   suite_id: string;

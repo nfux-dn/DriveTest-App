@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import io
+import zipfile
+from pathlib import Path
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.enums import ExecutionStatus, FinalVerdict
 from app.core.errors import ApiError
 from app.results.models import AiEvaluation, Artifact, TestRun
@@ -101,3 +106,50 @@ def list_artifacts(db: Session, test_run_id: str) -> list[ArtifactOut]:
         raise ApiError(code="TEST_RUN_NOT_FOUND", message="Test run not found.", status_code=404)
     rows = db.scalars(select(Artifact).where(Artifact.test_run_id == test_run_id)).all()
     return [ArtifactOut.model_validate(a) for a in rows]
+
+
+def _safe_artifact_path(path_or_key: str) -> Path:
+    """Resolve an artifact path and ensure it is inside the workspaces dir (spec 37.7)."""
+    workspaces = get_settings().workspaces_path.resolve()
+    path = Path(path_or_key).resolve()
+    try:
+        path.relative_to(workspaces)
+    except ValueError:
+        raise ApiError(code="ARTIFACT_FORBIDDEN", message="Artifact path is not allowed.", status_code=403)
+    if not path.exists() or not path.is_file():
+        raise ApiError(code="ARTIFACT_NOT_FOUND", message="Artifact file not found.", status_code=404)
+    return path
+
+
+def get_artifact_download(db: Session, test_run_id: str, artifact_id: str) -> tuple[Path, str]:
+    """Return (path, filename) for a single artifact, validated for safe download."""
+    artifact = db.get(Artifact, artifact_id)
+    if artifact is None or artifact.test_run_id != test_run_id:
+        raise ApiError(code="ARTIFACT_NOT_FOUND", message="Artifact not found.", status_code=404)
+    path = _safe_artifact_path(artifact.path_or_object_key)
+    return path, path.name
+
+
+def bundle_artifacts(db: Session, test_run_id: str) -> tuple[bytes, str]:
+    """Zip all of a test run's artifacts and return (bytes, filename)."""
+    tr = db.get(TestRun, test_run_id)
+    if tr is None:
+        raise ApiError(code="TEST_RUN_NOT_FOUND", message="Test run not found.", status_code=404)
+    rows = db.scalars(select(Artifact).where(Artifact.test_run_id == test_run_id)).all()
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        seen: set[str] = set()
+        for artifact in rows:
+            try:
+                path = _safe_artifact_path(artifact.path_or_object_key)
+            except ApiError:
+                continue  # skip missing/forbidden files rather than fail the whole bundle
+            arcname = path.name
+            if arcname in seen:
+                arcname = f"{artifact.artifact_type}_{path.name}"
+            seen.add(arcname)
+            zf.write(path, arcname=arcname)
+
+    filename = f"{tr.test_id}_{test_run_id[:8]}_files.zip"
+    return buffer.getvalue(), filename

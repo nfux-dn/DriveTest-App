@@ -107,7 +107,7 @@ def _execute_run(run_id: str) -> None:
 
             for tr in test_runs:
                 _run_one_test(
-                    db, run, suite, source_root, workspace, tr, context_base, settings, broker_env
+                    db, run, suite, source_root, workspace, tr, context_base, settings, broker_env, manager
                 )
 
             run.status = RunStatus.COMPLETED.value
@@ -156,7 +156,7 @@ def _resolve_source(db, run: Run, workspace: Workspace) -> Path:
 
 
 def _run_one_test(
-    db, run, suite, source_root, workspace, tr: TestRun, context_base, settings, broker_env
+    db, run, suite, source_root, workspace, tr: TestRun, context_base, settings, broker_env, manager
 ) -> None:
     tr.execution_status = ExecutionStatus.RUNNING.value
     tr.started_at = datetime.now(timezone.utc)
@@ -164,6 +164,9 @@ def _run_one_test(
 
     test_dir = source_root / "suites" / run.suite_id / "tests" / tr.test_id
     context = {**context_base, "test_id": tr.test_id, "values": _run_values(db, run)}
+
+    # Mark where this test's device session begins so we can save it as an artifact.
+    session_start = manager.transcript_len()
 
     outcome: ExecOutcome = execute_test(
         test_dir=test_dir,
@@ -181,7 +184,8 @@ def _run_one_test(
     tr.finished_at = datetime.now(timezone.utc)
     db.commit()
 
-    _persist_logs(db, workspace, tr, outcome)
+    session_text = manager.transcript_since(session_start)
+    _persist_logs(db, workspace, tr, outcome, session_text)
 
     # AI review runs for every successfully executed test (spec section 6). For
     # non-COMPLETED executions AI does not produce a product verdict (spec 8).
@@ -285,13 +289,27 @@ def _mark_tests_infra_error(db, test_runs: list[TestRun]) -> None:
     db.commit()
 
 
-def _persist_logs(db, workspace: Workspace, tr: TestRun, outcome: ExecOutcome) -> None:
+def _persist_logs(db, workspace: Workspace, tr: TestRun, outcome: ExecOutcome, session_text: str) -> None:
+    """Write all files gathered for this test and register them as artifacts."""
     stdout_path = workspace.logs / f"{tr.test_id}.stdout.txt"
     stderr_path = workspace.logs / f"{tr.test_id}.stderr.txt"
+    session_path = workspace.logs / f"{tr.test_id}.session.txt"
     stdout_path.write_text(outcome.stdout or "", encoding="utf-8")
     stderr_path.write_text(outcome.stderr or "", encoding="utf-8")
+    session_path.write_text(session_text or "(no device commands were issued)\n", encoding="utf-8")
 
-    for path, artifact_type in ((stdout_path, "stdout"), (stderr_path, "stderr")):
+    files: list[tuple[Path, str]] = [
+        (session_path, "ssh_session"),
+        (stdout_path, "stdout"),
+        (stderr_path, "stderr"),
+    ]
+
+    # The result.json the test wrote (if any), gathered as an artifact too.
+    result_path = workspace.results / f"{tr.test_id}.result.json"
+    if result_path.exists():
+        files.append((result_path, "result"))
+
+    for path, artifact_type in files:
         db.add(
             Artifact(
                 test_run_id=tr.id,

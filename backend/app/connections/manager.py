@@ -54,10 +54,22 @@ class ConnectionManager:
         self._reconnect_attempts = max(0, reconnect_attempts)
         self._context = context or {}
         self._connections: dict[str, _DeviceConnection] = {}
+        # Ordered, credential-masked record of every command + output (for artifacts).
+        self._transcript: list[str] = []
 
     @property
     def roles(self) -> list[str]:
         return list(self._connections.keys())
+
+    def transcript_len(self) -> int:
+        return len(self._transcript)
+
+    def transcript_since(self, start: int) -> str:
+        return "\n".join(self._transcript[start:])
+
+    def _record(self, role: str, command: str, output: str) -> None:
+        entry = f"[{role}] $ {command}\n{output}".rstrip()
+        self._transcript.append(entry)
 
     def establish(self, specs: list[DeviceSpec], secret_resolver: SecretResolver | None) -> None:
         for spec in specs:
@@ -87,12 +99,15 @@ class ConnectionManager:
         conn = self._require(role)
         self._ensure_alive(conn)
         secrets = [conn.password] if conn.password else []
-        logger.info("device_exec role=%s command=%s %s", role, _mask(command, secrets), self._ctx())
+        masked_command = _mask(command, secrets)
+        logger.info("device_exec role=%s command=%s %s", role, masked_command, self._ctx())
         try:
             _status, output = self._transport.exec(conn.client, command, self._command_timeout)
         except Exception as exc:  # noqa: BLE001
             raise ConnectionError(f"Command execution failed on '{role}'.") from exc
-        return _mask(output, secrets)
+        masked_output = _mask(output, secrets)
+        self._record(role, masked_command, masked_output)
+        return masked_output
 
     def configure(self, role: str, commands: list[str]) -> str:
         conn = self._require(role)
@@ -100,11 +115,14 @@ class ConnectionManager:
         secrets = [conn.password] if conn.password else []
         outputs: list[str] = []
         for command in commands:
-            logger.info("device_config role=%s command=%s %s", role, _mask(command, secrets), self._ctx())
+            masked_command = _mask(command, secrets)
+            logger.info("device_config role=%s command=%s %s", role, masked_command, self._ctx())
             try:
                 _status, output = self._transport.exec(conn.client, command, self._command_timeout)
             except Exception as exc:  # noqa: BLE001
                 raise ConnectionError(f"Configuration failed on '{role}'.") from exc
+            masked_output = _mask(output, secrets)
+            self._record(role, masked_command, masked_output)
             outputs.append(output)
         return _mask("\n".join(outputs), secrets)
 
