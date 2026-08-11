@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DriveTest — Network Test Orchestration Platform</title>
+<style>
+  :root {
+    --bg: #090a0c;
+    --surface: #111318;
+    --surface-elevated: #171a20;
+    --border: #272b33;
+    --border-bright: #363b45;
+    --text: #f4f6f8;
+    --text-secondary: #9aa1ab;
+    --text-muted: #666d78;
+
+    --success: #22c55e;
+    --failure: #ef4444;
+    --warning: #f59e0b;
+    --info: #3b82f6;
+
+    --radius: 12px;
+    --radius-sm: 7px;
+    --transition: 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    background:
+      radial-gradient(1200px 700px at 78% -10%, rgba(59,130,246,0.10), transparent 55%),
+      radial-gradient(900px 600px at -5% 105%, rgba(34,197,94,0.06), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* subtle grid texture */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 46px 46px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---------- Deck / slides ---------- */
+  .deck { position: relative; height: 100vh; width: 100vw; z-index: 1; }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6vh 7vw 9vh;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(24px) scale(0.99);
+    transition: opacity var(--transition), transform var(--transition), visibility var(--transition);
+    overflow-y: auto;
+  }
+  .slide.active {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
+  .slide.leaving {
+    transform: translateY(-24px) scale(0.99);
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+  }
+  .eyebrow .num { color: var(--info); }
+  .eyebrow::before {
+    content: "";
+    width: 26px; height: 1px;
+    background: var(--border-bright);
+  }
+
+  h1.slide-title {
+    font-size: clamp(30px, 4.4vw, 58px);
+    font-weight: 680;
+    letter-spacing: -0.02em;
+    line-height: 1.04;
+    margin-bottom: 20px;
+  }
+  h2.slide-title {
+    font-size: clamp(26px, 3.4vw, 44px);
+    font-weight: 660;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+    margin-bottom: 26px;
+  }
+  .lead {
+    font-size: clamp(16px, 1.5vw, 21px);
+    color: var(--text-secondary);
+    max-width: 60ch;
+    margin-bottom: 6px;
+  }
+  .accent { color: var(--info); }
+  .g { color: var(--success); }
+  .r { color: var(--failure); }
+  .a { color: var(--warning); }
+  strong { color: var(--text); font-weight: 640; }
+
+  /* ---------- Cards & layout ---------- */
+  .cols { display: grid; gap: 20px; margin-top: 14px; }
+  .cols.c2 { grid-template-columns: repeat(2, 1fr); }
+  .cols.c3 { grid-template-columns: repeat(3, 1fr); }
+  .cols.c4 { grid-template-columns: repeat(4, 1fr); }
+
+  .card {
+    background: linear-gradient(180deg, var(--surface-elevated), var(--surface));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: var(--border-bright);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.45);
+  }
+  .card .k {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card h3 { font-size: 18px; font-weight: 620; margin-bottom: 8px; }
+  .card p { color: var(--text-secondary); font-size: 14.5px; }
+
+  .ico {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    display: grid; place-items: center;
+    background: rgba(59,130,246,0.12);
+    border: 1px solid rgba(59,130,246,0.3);
+    color: var(--info);
+    flex: none;
+  }
+  .ico svg { width: 18px; height: 18px; }
+  .ico.green { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.32); color: var(--success); }
+  .ico.red { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.32); color: var(--failure); }
+  .ico.amber { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.32); color: var(--warning); }
+
+  ul.bul { list-style: none; display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+  ul.bul li { display: flex; gap: 13px; font-size: clamp(15px, 1.35vw, 18px); color: var(--text-secondary); align-items: flex-start; }
+  ul.bul li .m {
+    flex: none; margin-top: 2px;
+    width: 22px; height: 22px; border-radius: 6px;
+    display: grid; place-items: center;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    color: var(--info);
+  }
+  ul.bul li .m svg { width: 13px; height: 13px; }
+  ul.bul li .m.red { color: var(--failure); }
+  ul.bul li .m.green { color: var(--success); }
+  ul.bul li .m.amber { color: var(--warning); }
+
+  /* pros/cons columns (reuses .k label + .bul markers) */
+  .proscons { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 12px; }
+  .proscons .bul { gap: 9px; margin-top: 0; }
+  .proscons .bul li { font-size: 13px; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 46px; align-items: center; }
+  .two.narrow-left { grid-template-columns: 0.85fr 1.15fr; }
+
+  /* ---------- Pills ---------- */
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 12px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 640; font-family: var(--mono);
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.passed { color: var(--success); background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.35); }
+  .pill.failed { color: var(--failure); background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); }
+  .pill.review { color: var(--warning); background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.35); }
+  .pill.running { color: var(--info); background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.35); }
+  .pill.running .dot { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.25;} }
+
+  code, .mono { font-family: var(--mono); }
+  .chip {
+    font-family: var(--mono); font-size: 12.5px;
+    background: #05060a; border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 6px; color: var(--text-secondary);
+  }
+
+  /* ---------- Truth table ---------- */
+  table.truth { border-collapse: collapse; font-family: var(--mono); font-size: 14px; width: 100%; }
+  table.truth th, table.truth td { border: 1px solid var(--border); padding: 9px 14px; text-align: left; }
+  table.truth th { color: var(--text-muted); font-weight: 600; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; background: var(--surface); }
+  table.truth td { color: var(--text-secondary); }
+  table.truth tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* ---------- Pipeline ---------- */
+  .pipe { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; margin-top: 10px; }
+  .pipe .step {
+    flex: 1 1 0; min-width: 130px;
+    background: linear-gradient(180deg, var(--surface-elevated), var(--surface));
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 15px;
+    position: relative;
+    transition: border-color var(--transition), transform var(--transition);
+  }
+  .pipe .step:hover { border-color: var(--info); transform: translateY(-2px); }
+  .pipe .step .n { font-family: var(--mono); font-size: 11px; color: var(--info); margin-bottom: 7px; }
+  .pipe .step .t { font-size: 14.5px; font-weight: 600; }
+  .pipe .step .d { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+
+  .flowrow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin-top: 10px; }
+  .flowrow .node {
+    background: linear-gradient(180deg, var(--surface-elevated), var(--surface));
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 16px; font-size: 14px; font-weight: 560;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .flowrow .arrow { color: var(--text-muted); padding: 0 10px; font-size: 18px; }
+
+  /* verdict flow */
+  .verdictflow { display: grid; grid-template-columns: 1fr 1fr auto 1fr; gap: 14px; align-items: center; margin-top: 8px; }
+
+  pre.code {
+    background: #05060a; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px 18px;
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.6;
+    color: #c9d1d9; overflow: auto;
+  }
+  pre.code .cm { color: var(--text-muted); }
+  pre.code .kw { color: #c586c0; }
+  pre.code .fn { color: var(--info); }
+  pre.code .st { color: var(--success); }
+
+  /* ---------- Title slide ---------- */
+  .hero { align-items: center; text-align: center; }
+  .logo-lockup { display: flex; align-items: center; gap: 20px; margin-bottom: 30px; }
+  .logo-mark {
+    width: 78px; height: 78px; border-radius: 20px;
+    background: linear-gradient(150deg, #12161d, #0b0d11);
+    border: 1px solid var(--border-bright);
+    display: grid; place-items: center;
+    box-shadow: 0 0 0 1px rgba(59,130,246,0.15), 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .logo-mark svg { width: 44px; height: 44px; }
+  .wordmark { font-size: clamp(46px, 8vw, 96px); font-weight: 720; letter-spacing: -0.03em; line-height: 1; }
+  .hero .tag { font-size: clamp(16px, 1.7vw, 22px); color: var(--text-secondary); margin-top: 4px; letter-spacing: 0.01em; }
+  .hero .sub { font-size: clamp(13px, 1.2vw, 15px); color: var(--text-muted); font-family: var(--mono); margin-top: 26px; letter-spacing: 0.04em; }
+  .hero .badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 30px; }
+
+  .quote {
+    border-left: 3px solid var(--info);
+    padding: 4px 0 4px 22px;
+    font-size: clamp(19px, 2.3vw, 30px);
+    font-weight: 560; letter-spacing: -0.01em;
+    line-height: 1.32; color: var(--text);
+    max-width: 24ch;
+  }
+
+  .stat { text-align: left; }
+  .stat .big { font-size: clamp(28px, 3.4vw, 46px); font-weight: 720; letter-spacing: -0.02em; }
+  .stat .lbl { color: var(--text-muted); font-size: 13.5px; margin-top: 2px; }
+
+  /* ---------- Nav / chrome ---------- */
+  .progress { position: fixed; top: 0; left: 0; height: 2px; background: var(--info); width: 0; z-index: 40; transition: width var(--transition); box-shadow: 0 0 12px rgba(59,130,246,0.6); }
+
+  .brand-corner {
+    position: fixed; top: 22px; left: 30px; z-index: 30;
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 640; font-size: 15px; letter-spacing: -0.01em;
+  }
+  .brand-corner .bm { width: 24px; height: 24px; }
+
+  .nav {
+    position: fixed; bottom: 20px; right: 28px; z-index: 30;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .nav .counter { font-family: var(--mono); font-size: 12.5px; color: var(--text-muted); }
+  .nav .counter b { color: var(--text); font-weight: 600; }
+  .nav button {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--surface-elevated); border: 1px solid var(--border);
+    color: var(--text-secondary); cursor: pointer; display: grid; place-items: center;
+    transition: border-color var(--transition), color var(--transition), background var(--transition);
+  }
+  .nav button:hover { border-color: var(--border-bright); color: var(--text); }
+  .nav button:active { transform: translateY(1px); }
+  .nav button svg { width: 17px; height: 17px; }
+
+  .dots { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 30; display: flex; gap: 8px; }
+  .dots .d { width: 7px; height: 7px; border-radius: 50%; background: var(--border-bright); cursor: pointer; transition: background var(--transition), transform var(--transition); }
+  .dots .d.on { background: var(--info); transform: scale(1.35); }
+
+  .hint {
+    position: fixed; bottom: 24px; left: 30px; z-index: 30;
+    font-family: var(--mono); font-size: 11.5px; color: var(--text-muted);
+    display: flex; gap: 8px; align-items: center;
+  }
+  .kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--text-secondary); }
+
+  .footnote { position: absolute; bottom: 3.4vh; left: 7vw; font-family: var(--mono); font-size: 11.5px; color: var(--text-muted); letter-spacing: 0.03em; }
+
+  @media (max-width: 900px) {
+    .two, .two.narrow-left { grid-template-columns: 1fr; gap: 22px; }
+    .cols.c3, .cols.c4 { grid-template-columns: 1fr 1fr; }
+    .slide { padding: 8vh 7vw 12vh; }
+    .verdictflow { grid-template-columns: 1fr; }
+    .proscons { gap: 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<div class="brand-corner" id="brandCorner" style="display:none">
+  <svg class="bm" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="6" cy="16" r="3" fill="#3b82f6"/>
+    <circle cx="26" cy="8" r="3" fill="#22c55e"/>
+    <circle cx="26" cy="24" r="3" fill="#9aa1ab"/>
+    <path d="M8.6 15 23.4 8.6M8.6 17 23.4 23.4" stroke="#363b45" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>
+  <span>Drive<span class="accent">Test</span></span>
+</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1. TITLE / ENTRANCE -->
+  <section class="slide hero" data-title="DriveTest">
+    <div class="logo-lockup">
+      <div class="logo-mark">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="9" cy="24" r="4.4" fill="#3b82f6"/>
+          <circle cx="39" cy="12" r="4.4" fill="#22c55e"/>
+          <circle cx="39" cy="36" r="4.4" fill="#9aa1ab"/>
+          <path d="M12.8 22.5 35.2 13M12.8 25.5 35.2 35" stroke="#363b45" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="wordmark">Drive<span class="accent">Test</span></div>
+    </div>
+    <div class="tag">Network Test Orchestration Platform</div>
+    <div class="badges">
+      <span class="pill passed"><span class="dot"></span>Deterministic Tests and Verdicts</span>
+      <span class="pill running"><span class="dot"></span>AI Flexible Review</span>
+      <span class="pill review"><span class="dot"></span>Transparent Test Results</span>
+    </div>
+    <div class="sub">Execute with Precision. Evaluate with Intelligence</div>
+  </section>
+
+  <!-- 2. DRIVENETS TESTING TODAY -->
+  <section class="slide" data-title="Testing Today">
+    <div class="eyebrow"><span class="num">01</span> DriveNets Testing Today</div>
+    <h2 class="slide-title">Pros &amp; Cons of each approach</h2>
+    <p class="lead" style="margin-bottom:24px">Each approach solves part of the challenge. None solves it all.</p>
+    <div class="cols c2" style="grid-template-columns:repeat(4, 1fr)">
+      <div class="card">
+        <div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg></span>01 · Manual Testing</div>
+        <div class="proscons">
+          <div>
+            <div class="k" style="color:var(--success);margin-bottom:8px">Pros</div>
+            <ul class="bul">
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Flexible — handles any scenario</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Deep engineer judgment</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>No framework required</span></li>
+            </ul>
+          </div>
+          <div>
+            <div class="k" style="color:var(--failure);margin-bottom:8px">Cons</div>
+            <ul class="bul">
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Prone to human error</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Time consuming, repetitive tasks and regressions</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Lessons learned not enforced</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Knowledge isn't preserved</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg></span>02 · AI-Only Testing</div>
+        <div class="proscons">
+          <div>
+            <div class="k" style="color:var(--success);margin-bottom:8px">Pros</div>
+            <ul class="bul">
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Automated analysis</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Spots subtle anomalies</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Minimal human intervention — time efficient</span></li>
+            </ul>
+          </div>
+          <div>
+            <div class="k" style="color:var(--failure);margin-bottom:8px">Cons</div>
+            <ul class="bul">
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Can hallucinate — cannot be trusted</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>No deterministic guarantee</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Token cost inefficiency</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M6.6 7.4 10.6 16.2M17.4 7.4 13.4 16.2M7 6h10"/></svg></span>03 · E2E Testing</div>
+        <div class="proscons">
+          <div>
+            <div class="k" style="color:var(--success);margin-bottom:8px">Pros</div>
+            <ul class="bul">
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Automated testing</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>A part of the CI pipeline</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Existing test development &amp; execution infrastructure</span></li>
+            </ul>
+          </div>
+          <div>
+            <div class="k" style="color:var(--failure);margin-bottom:8px">Cons</div>
+            <ul class="bul">
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Limited lab resources, setups &amp; connectivity options</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Automation constrained by existing test setups &amp; code infrastructure</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Test coverage intentionally limited to keep CI build times manageable</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Failure detection limited to predefined validation criteria</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Limited execution visibility reduces confidence in test results</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l4 4v16H6z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></svg></span>04 · TOD / AOD-Based Testing</div>
+        <div class="proscons">
+          <div>
+            <div class="k" style="color:var(--success);margin-bottom:8px">Pros</div>
+            <ul class="bul">
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Automated testing</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Execution and results visibility</span></li>
+              <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Proven &amp; trusted testing framework</span></li>
+            </ul>
+          </div>
+          <div>
+            <div class="k" style="color:var(--failure);margin-bottom:8px">Cons</div>
+            <ul class="bul">
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Out of date</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Lack of ongoing maintenance</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Limited access to modifying tests</span></li>
+              <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Complicated infrastructure for test creation</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. THE VISION -->
+  <section class="slide" data-title="The Vision">
+    <div class="eyebrow"><span class="num">02</span> The Vision</div>
+    <div class="two">
+      <div>
+        <h2 class="slide-title" style="font-size:clamp(24px,3vw,38px)">Make advanced network testing <span class="accent">flexible</span>, scalable, and trusted.</h2>
+        <p class="lead" style="font-size:16px">
+          A QA-owned and maintained testing platform that adapts to different platforms, resources,
+          connectivity schemes, and testing methods — enabling complex network validation through a
+          unified and flexible workflow.
+        </p>
+        <div class="quote" style="margin-top:26px;max-width:32ch">The reliability of deterministic testing. The flexibility and insight of AI.</div>
+        <p class="lead" style="margin-top:16px;color:var(--text-muted);font-size:14px;font-family:var(--mono);letter-spacing:0.02em">
+          Structured execution · Intelligent review · Trusted results
+        </p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="card" style="padding:14px 16px">
+          <div class="k" style="margin-bottom:6px"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 20a7 7 0 0 1 13 0"/><path d="M16 11l2 2 4-4"/></svg></span>01 · QA-Owned &amp; Maintained</div>
+          <p style="font-size:13.5px">Testing logic, workflows and validation methods evolve directly with QA needs.</p>
+        </div>
+        <div class="card" style="padding:14px 16px">
+          <div class="k" style="margin-bottom:6px"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h5l7 10h4"/><path d="M4 17h5l3-4"/><path d="M17 4l3 3-3 3"/><path d="M17 14l3 3-3 3"/></svg></span>02 · Adaptive Execution</div>
+          <p style="font-size:13.5px">Dynamically pick the right platforms, connectivity schemes, resources and methods per scenario.</p>
+        </div>
+        <div class="card" style="padding:14px 16px">
+          <div class="k" style="margin-bottom:6px"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 8l10 5 10-5z"/><path d="M2 13l10 5 10-5"/></svg></span>03 · Built for Complex Testing</div>
+          <p style="font-size:13.5px">Support advanced, multi-step and resource-intensive scenarios — not just simple functional checks.</p>
+        </div>
+        <div class="card" style="padding:14px 16px">
+          <div class="k" style="margin-bottom:6px"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v6c0 4-3 7-7 8-4-1-7-4-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg></span>04 · Deterministic by Design</div>
+          <p style="font-size:13.5px">Use structured scripts and predefined logic wherever a reliable deterministic verdict is possible.</p>
+        </div>
+        <div class="card" style="padding:14px 16px">
+          <div class="k" style="margin-bottom:6px"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg></span>05 · AI-Augmented Validation</div>
+          <p style="font-size:13.5px">An independent AI review of logs, SSH output, measurements and evidence catches what fixed rules miss.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. DRIVETEST AS A SOLUTION -->
+  <section class="slide" data-title="The Solution">
+    <div class="eyebrow"><span class="num">03</span> DriveTest as a Solution</div>
+    <h2 class="slide-title">A web platform that orchestrates, executes and <span class="accent">evaluates</span> validation</h2>
+    <div class="cols c4">
+      <div class="card">
+        <div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span>Interface</div>
+        <h3>React + TypeScript</h3>
+        <p>A dark, premium dashboard, new-run wizard and live run view — Vite, TanStack Query, strict typing.</p>
+      </div>
+      <div class="card">
+        <div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>Backend</div>
+        <h3>FastAPI + Postgres</h3>
+        <p>A modular monolith — auth, suites, prerequisites, git, runner, AI, evaluation — Pydantic v2 &amp; SQLAlchemy 2.</p>
+      </div>
+      <div class="card">
+        <div class="k"><span class="ico green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg></span>Runner</div>
+        <h3>Isolated execution</h3>
+        <p>One subprocess per test, isolated workspace, timeouts, and a strict result contract — never in the API process.</p>
+      </div>
+      <div class="card">
+        <div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg></span>AI</div>
+        <h3>Pluggable evaluator</h3>
+        <p>Mock, OpenAI, Anthropic or Cursor — every completed test gets a structured, versioned AI review.</p>
+      </div>
+    </div>
+    <div class="cols c3" style="margin-top:20px">
+      <div class="card"><h3 style="font-size:16px">Suites &amp; Tests</h3><p>Related tests grouped into a Suite; each ships a README and a declarative prerequisite form.</p></div>
+      <div class="card"><h3 style="font-size:16px">Per-user Git identity</h3><p>Each user connects their own account; tokens are encrypted at rest and never touch the browser or logs.</p></div>
+      <div class="card"><h3 style="font-size:16px">Run-owned devices</h3><p>Persistent SSH sessions owned by the Run — tests never see a host or a credential.</p></div>
+    </div>
+    <div class="footnote">Everything runs in Docker · Postgres 16 · Python 3.12 · Node 20</div>
+  </section>
+
+  <!-- 5. FLOW: THE FOUR VERDICTS -->
+  <section class="slide" data-title="Four Verdicts">
+    <div class="eyebrow"><span class="num">04</span> How it works · The heart of the product</div>
+    <h2 class="slide-title">Four values, always kept <span class="accent">separate</span></h2>
+    <p class="lead" style="margin-bottom:22px">They are shown side by side in the UI — the system never hides a disagreement.</p>
+    <div class="cols c4">
+      <div class="card">
+        <div class="k">1 · Execution status</div>
+        <h3 style="font-size:16px">Did it run?</h3>
+        <p><span class="chip">COMPLETED</span> <span class="chip">SCRIPT_ERROR</span> <span class="chip">INFRA_ERROR</span> <span class="chip">TIMEOUT</span></p>
+        <p style="margin-top:10px">An execution failure is <strong>not</strong> a product failure.</p>
+      </div>
+      <div class="card">
+        <div class="k">2 · Test verdict</div>
+        <h3 style="font-size:16px">What the script decided</h3>
+        <p><span class="pill passed"><span class="dot"></span>PASSED</span> <span class="pill failed"><span class="dot"></span>FAILED</span> <span class="chip">null</span></p>
+        <p style="margin-top:10px"><span class="chip">null</span> means the test <strong>punts</strong> the decision to AI.</p>
+      </div>
+      <div class="card">
+        <div class="k">3 · AI verdict</div>
+        <h3 style="font-size:16px">The reviewer's opinion</h3>
+        <p><span class="pill passed"><span class="dot"></span>PASSED</span> <span class="pill failed"><span class="dot"></span>FAILED</span> <span class="pill review"><span class="dot"></span>INCONCLUSIVE</span></p>
+        <p style="margin-top:10px">AI reviews <strong>every</strong> completed test.</p>
+      </div>
+      <div class="card" style="border-color:var(--border-bright)">
+        <div class="k">4 · Final verdict</div>
+        <h3 style="font-size:16px">Computed by the backend</h3>
+        <p><span class="pill passed"><span class="dot"></span>PASSED</span> <span class="pill failed"><span class="dot"></span>FAILED</span> <span class="pill review"><span class="dot"></span>REVIEW_REQUIRED</span></p>
+        <p style="margin-top:10px">One deterministic rule — the single source of truth.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. FLOW: FINAL VERDICT ENGINE -->
+  <section class="slide" data-title="Verdict Engine">
+    <div class="eyebrow"><span class="num">05</span> How it works · The final verdict rule</div>
+    <div class="two narrow-left">
+      <div>
+        <h2 class="slide-title" style="font-size:clamp(24px,3vw,38px)">A deterministic <span class="r">FAIL</span> can never become a <span class="g">PASS</span></h2>
+        <pre class="code"><span class="cm"># backend is authoritative — never duplicated in the UI</span>
+<span class="kw">if</span> <span class="fn">ai</span> == <span class="st">"PASSED"</span> <span class="kw">and</span> test <span class="kw">in</span> (<span class="st">"PASSED"</span>, <span class="kw">None</span>):
+    final = <span class="st">"PASSED"</span>
+<span class="kw">elif</span> <span class="fn">ai</span> == <span class="st">"INCONCLUSIVE"</span> <span class="kw">and</span> test != <span class="st">"FAILED"</span>:
+    final = <span class="st">"REVIEW_REQUIRED"</span>
+<span class="kw">else</span>:
+    final = <span class="st">"FAILED"</span></pre>
+        <p class="lead" style="font-size:15px;color:var(--text-muted);margin-top:16px">Covered by a unit-tested truth table — the rule lives in exactly one place.</p>
+      </div>
+      <table class="truth">
+        <thead><tr><th>Test</th><th>AI</th><th>Final</th></tr></thead>
+        <tbody>
+          <tr><td class="g">PASSED</td><td class="g">PASSED</td><td><span class="pill passed"><span class="dot"></span>PASSED</span></td></tr>
+          <tr><td class="r">FAILED</td><td class="g">PASSED</td><td><span class="pill failed"><span class="dot"></span>FAILED</span></td></tr>
+          <tr><td class="g">PASSED</td><td class="r">FAILED</td><td><span class="pill failed"><span class="dot"></span>FAILED</span></td></tr>
+          <tr><td>null</td><td class="g">PASSED</td><td><span class="pill passed"><span class="dot"></span>PASSED</span></td></tr>
+          <tr><td>null</td><td class="r">FAILED</td><td><span class="pill failed"><span class="dot"></span>FAILED</span></td></tr>
+          <tr><td class="g">PASSED</td><td class="a">INCONCLUSIVE</td><td><span class="pill review"><span class="dot"></span>REVIEW_REQUIRED</span></td></tr>
+          <tr><td class="r">FAILED</td><td class="a">INCONCLUSIVE</td><td><span class="pill failed"><span class="dot"></span>FAILED</span></td></tr>
+          <tr><td>null</td><td class="a">INCONCLUSIVE</td><td><span class="pill review"><span class="dot"></span>REVIEW_REQUIRED</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 7. FLOW: WORKFLOW PIPELINE -->
+  <section class="slide" data-title="The Workflow">
+    <div class="eyebrow"><span class="num">06</span> How it works · The run pipeline</div>
+    <h2 class="slide-title">From picking a suite to a trusted report</h2>
+    <div class="pipe">
+      <div class="step"><div class="n">01</div><div class="t">Select Suite</div><div class="d">Pick what to validate</div></div>
+      <div class="step"><div class="n">02</div><div class="t">Environment</div><div class="d">README + device form</div></div>
+      <div class="step"><div class="n">03</div><div class="t">Prerequisites</div><div class="d">Validate + auto-checks</div></div>
+      <div class="step"><div class="n">04</div><div class="t">Git Revision</div><div class="d">Branch / commit</div></div>
+      <div class="step"><div class="n">05</div><div class="t">Create Run</div><div class="d">Isolated workspace</div></div>
+      <div class="step"><div class="n">06</div><div class="t">Open Sessions</div><div class="d">One per device role</div></div>
+      <div class="step"><div class="n">07</div><div class="t">Execute</div><div class="d">Tests run in order</div></div>
+      <div class="step"><div class="n">08</div><div class="t">Evaluate</div><div class="d">AI + final verdict</div></div>
+      <div class="step" style="border-color:var(--success)"><div class="n" style="color:var(--success)">09</div><div class="t">Report</div><div class="d">Stored &amp; exportable</div></div>
+    </div>
+    <div class="cols c3" style="margin-top:26px">
+      <div class="card"><div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>Gated</div><p>Execution is <strong>blocked</strong> until every required prerequisite is satisfied.</p></div>
+      <div class="card"><div class="k"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/></svg></span>Recorded</div><p>The exact <strong>commit SHA</strong> is the true execution revision, persisted with the run.</p></div>
+      <div class="card"><div class="k"><span class="ico green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span>Live</div><p>The run view streams status by polling — pass, fail, running and pending, in real time.</p></div>
+    </div>
+  </section>
+
+  <!-- 8. FLOW: SUITES & PREREQUISITES -->
+  <section class="slide" data-title="Suites & Prerequisites">
+    <div class="eyebrow"><span class="num">07</span> How it works · Suites &amp; dynamic prerequisites</div>
+    <div class="two">
+      <div>
+        <h2 class="slide-title" style="font-size:clamp(24px,3vw,38px)">Declarative suites, forms that build themselves</h2>
+        <ul class="bul">
+          <li><span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span><span>A <strong>Suite</strong> is a folder in Git: a README, a merged <span class="chip">prerequisites.yaml</span>, and independently-evaluated tests.</span></li>
+          <li><span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 10h8M8 14h5"/></svg></span><span>The YAML <strong>generates the device form</strong> automatically — IPs, interfaces, selects, confirmations, conditional fields.</span></li>
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg></span><span>Automatic <strong>checks</strong> use a fixed registry of handlers — YAML can <em>never</em> run arbitrary commands.</span></li>
+          <li><span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v18M3 12h18"/></svg></span><span>A field marked <span class="chip">device_role</span> tells the platform to open one session to that host.</span></li>
+        </ul>
+      </div>
+      <pre class="code"><span class="cm"># suites/pwhe_shaping/prerequisites.yaml</span>
+id: pwhe_shaping
+name: PWHE Shaping
+tests:
+  - max_bandwidth
+  - high_priority_queue
+
+sections:
+  - id: connectivity
+    fields:
+      - id: dut_management_ip
+        label: DUT Management IP
+        type: ip
+        required: <span class="st">true</span>
+        <span class="fn">device_role</span>: dut   <span class="cm"># → opens 1 SSH session</span></pre>
+    </div>
+  </section>
+
+  <!-- 9. FLOW: DEVICE CONNECTIONS -->
+  <section class="slide" data-title="Device Connections">
+    <div class="eyebrow"><span class="num">08</span> How it works · Run-owned connections</div>
+    <div class="two">
+      <div>
+        <h2 class="slide-title" style="font-size:clamp(24px,3vw,38px)">Tests <span class="accent">never</span> touch a host or a credential</h2>
+        <p class="lead">The Run — not the test — owns SSH. A Connection Manager opens one persistent session per device and a token-authed broker on localhost.</p>
+        <ul class="bul" style="margin-top:18px">
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg></span><span>Each subprocess gets only the <strong>broker URL, a per-run token, and device roles</strong>.</span></li>
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg></span><span>Pluggable transport: a <strong>simulated DNOS model</strong> for offline demos, real <strong>SSH (paramiko)</strong> for labs.</span></li>
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg></span><span>Sessions are opened at run start and <strong>closed automatically</strong> at run end.</span></li>
+        </ul>
+      </div>
+      <pre class="code"><span class="cm"># inside a test — the ExecutionContext SDK</span>
+<span class="kw">from</span> drivetest <span class="kw">import</span> ExecutionContext
+
+ctx = ExecutionContext.<span class="fn">from_env</span>()
+dut = ctx.<span class="fn">device</span>(<span class="st">"dut"</span>)
+
+dut.<span class="fn">run</span>(<span class="st">"show interfaces description"</span>)
+dut.<span class="fn">configure</span>([<span class="st">"interfaces"</span>, <span class="st">"  ge0"</span>, <span class="st">"  !"</span>])
+dut.<span class="fn">commit</span>()
+dut.<span class="fn">rollback</span>(1); dut.<span class="fn">commit</span>()   <span class="cm"># revert</span></pre>
+    </div>
+  </section>
+
+  <!-- 10. FLOW: AI REVIEWER -->
+  <section class="slide" data-title="AI Reviewer">
+    <div class="eyebrow"><span class="num">09</span> How it works · The AI reviewer</div>
+    <div class="two">
+      <div>
+        <h2 class="slide-title" style="font-size:clamp(24px,3vw,38px)">An engineering assistant, not a chatbot</h2>
+        <p class="lead">Every completed test is reviewed against its <span class="chip">evaluation.md</span>. The reviewer reads the session transcript, stdout/stderr and <span class="chip">result.json</span> — and returns a strict schema.</p>
+        <div class="cols c2" style="margin-top:18px">
+          <div class="card"><div class="k">Reads (evidence only)</div><p>Session transcript · stdout · stderr · result.json · expected behaviour</p></div>
+          <div class="card"><div class="k">Guardrails</div><p>Never invents data · never overrides a deterministic FAIL · returns INCONCLUSIVE when unsure</p></div>
+        </div>
+        <p class="lead" style="font-size:14px;color:var(--text-muted);margin-top:16px">Model, prompt version &amp; policy version are stored with every evaluation for reproducibility.</p>
+      </div>
+      <pre class="code">{
+  <span class="fn">"ai_verdict"</span>: <span class="st">"FAILED"</span>,
+  <span class="fn">"confidence"</span>: 0.92,
+  <span class="fn">"summary"</span>: <span class="st">"Measured rate exceeded the</span>
+             <span class="st">configured shaping profile."</span>,
+  <span class="fn">"anomalies"</span>: [<span class="st">"Burst 1180 &gt; 1000 Mbps"</span>],
+  <span class="fn">"evidence"</span>: [{ <span class="fn">"source"</span>: <span class="st">"measurement"</span> }],
+  <span class="fn">"likely_root_cause"</span>: <span class="st">"Policer misapplied"</span>,
+  <span class="fn">"recommended_next_step"</span>: <span class="st">"Re-check QoS map"</span>
+}</pre>
+      </div>
+      <div class="footnote">Providers: mock · OpenAI · Anthropic · Cursor — per-user keys, encrypted at rest, never placed in prompts</div>
+  </section>
+
+  <!-- 11. WHY NOT E2E -->
+  <section class="slide" data-title="Why not E2E">
+    <div class="eyebrow"><span class="num">10</span> Why not one big E2E test</div>
+    <h2 class="slide-title">Atomic, evaluated tests beat a monolithic scenario</h2>
+    <div class="two">
+      <div class="card" style="border-color:rgba(239,68,68,0.3)">
+        <div class="k"><span class="ico red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.4 5.6 5.6 18.4M5.6 5.6l12.8 12.8"/></svg></span>Pure end-to-end</div>
+        <ul class="bul" style="margin-top:6px">
+          <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>One giant scenario — the first failure hides everything downstream.</span></li>
+          <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Infra crash and product bug are <strong>indistinguishable</strong>.</span></li>
+          <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Binary pass/fail — no reasoning, no evidence, no review.</span></li>
+          <li><span class="m red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span>Brittle &amp; slow; hard to reproduce a specific failure.</span></li>
+        </ul>
+      </div>
+      <div class="card" style="border-color:rgba(34,197,94,0.32)">
+        <div class="k"><span class="ico green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg></span>DriveTest</div>
+        <ul class="bul" style="margin-top:6px">
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Each scenario is an <strong>independent test</strong> with its own verdict.</span></li>
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Execution status is <strong>separate</strong> from the product verdict.</span></li>
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Deterministic + AI review with <strong>evidence and confidence</strong>.</span></li>
+          <li><span class="m green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span><span>Structured, stored results — <strong>reproducible</strong> down to the commit.</span></li>
+        </ul>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:22px;color:var(--text-muted);font-size:15px">DriveTest doesn't replace E2E coverage — it <strong>orchestrates</strong> it as many small, individually-judged units.</p>
+  </section>
+
+  <!-- 12. ALTERNATIVES -->
+  <section class="slide" data-title="Alternatives">
+    <div class="eyebrow"><span class="num">11</span> Alternatives considered</div>
+    <h2 class="slide-title">Where existing approaches fall short</h2>
+    <table class="truth" style="font-size:13.5px">
+      <thead>
+        <tr><th>Approach</th><th>Isolated tests</th><th>Exec vs product</th><th>AI review</th><th>Reproducible</th><th>Secure creds</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Manual + spreadsheets</td><td class="r">✕</td><td class="r">✕</td><td class="r">✕</td><td class="r">✕</td><td class="r">✕</td></tr>
+        <tr><td>Raw CI (Jenkins/GitLab)</td><td class="a">partial</td><td class="r">✕</td><td class="r">✕</td><td class="a">partial</td><td class="a">partial</td></tr>
+        <tr><td>pytest / Robot harness</td><td class="g">✓</td><td class="r">✕</td><td class="r">✕</td><td class="a">partial</td><td class="r">✕</td></tr>
+        <tr><td>Vendor test suites (Ixia/Spirent)</td><td class="g">✓</td><td class="a">partial</td><td class="r">✕</td><td class="a">partial</td><td class="a">partial</td></tr>
+        <tr><td>"Just ask an LLM"</td><td class="r">✕</td><td class="r">✕</td><td class="g">✓</td><td class="r">✕</td><td class="r">✕</td></tr>
+        <tr style="background:rgba(59,130,246,0.06)"><td><strong>DriveTest</strong></td><td class="g">✓</td><td class="g">✓</td><td class="g">✓</td><td class="g">✓</td><td class="g">✓</td></tr>
+      </tbody>
+    </table>
+    <p class="lead" style="margin-top:22px;color:var(--text-muted);font-size:15px">DriveTest's edge is the <strong>hybrid</strong>: deterministic truth + a mandatory AI reviewer, wrapped in a reproducible, secure run model.</p>
+  </section>
+
+  <!-- 13. QUESTIONS -->
+  <section class="slide hero" data-title="Questions">
+    <div class="logo-lockup" style="margin-bottom:22px">
+      <div class="logo-mark" style="width:60px;height:60px;border-radius:16px">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="9" cy="24" r="4.4" fill="#3b82f6"/>
+          <circle cx="39" cy="12" r="4.4" fill="#22c55e"/>
+          <circle cx="39" cy="36" r="4.4" fill="#9aa1ab"/>
+          <path d="M12.8 22.5 35.2 13M12.8 25.5 35.2 35" stroke="#363b45" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+    <h1 class="slide-title" style="text-align:center">Questions?</h1>
+    <p class="tag">What happened · why this verdict · can I trust &amp; reproduce it</p>
+    <div class="badges">
+      <span class="chip">github.com/nfux-dn/DriveTest-App</span>
+    </div>
+    <div class="sub">Thank you — Drive<span class="accent">Test</span></div>
+  </section>
+
+</div>
+
+<!-- chrome -->
+<div class="dots" id="dots"></div>
+<div class="nav">
+  <span class="counter"><b id="cur">1</b> / <span id="total">13</span></span>
+  <button id="prev" aria-label="Previous slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <button id="next" aria-label="Next slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg></button>
+</div>
+<div class="hint"><span class="kbd">←</span><span class="kbd">→</span> navigate · <span class="kbd">F</span> fullscreen</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let idx = 0;
+
+  const progress = document.getElementById('progress');
+  const curEl = document.getElementById('cur');
+  const totalEl = document.getElementById('total');
+  const dotsWrap = document.getElementById('dots');
+  const brandCorner = document.getElementById('brandCorner');
+  totalEl.textContent = total;
+
+  // build dots
+  slides.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'd';
+    d.title = s.dataset.title || ('Slide ' + (i + 1));
+    d.addEventListener('click', () => go(i));
+    dotsWrap.appendChild(d);
+  });
+  const dots = Array.from(dotsWrap.children);
+
+  function render() {
+    slides.forEach((s, i) => {
+      s.classList.toggle('active', i === idx);
+      s.classList.toggle('leaving', i < idx);
+    });
+    dots.forEach((d, i) => d.classList.toggle('on', i === idx));
+    progress.style.width = (total <= 1 ? 100 : (idx / (total - 1)) * 100) + '%';
+    curEl.textContent = idx + 1;
+    brandCorner.style.display = idx === 0 ? 'none' : 'flex';
+    if (location.hash !== '#' + (idx + 1)) history.replaceState(null, '', '#' + (idx + 1));
+  }
+
+  function go(n) { idx = Math.max(0, Math.min(total - 1, n)); render(); }
+  function next() { go(idx + 1); }
+  function prev() { go(idx - 1); }
+
+  document.getElementById('next').addEventListener('click', next);
+  document.getElementById('prev').addEventListener('click', prev);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(total - 1); }
+    else if (e.key === 'f' || e.key === 'F') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+  });
+
+  // touch swipe
+  let tx = 0;
+  addEventListener('touchstart', (e) => { tx = e.changedTouches[0].clientX; }, { passive: true });
+  addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 60) (dx < 0 ? next : prev)();
+  }, { passive: true });
+
+  // deep-link support
+  const start = parseInt((location.hash || '').replace('#', ''), 10);
+  if (start >= 1 && start <= total) idx = start - 1;
+  render();
+</script>
+</body>
+</html>
