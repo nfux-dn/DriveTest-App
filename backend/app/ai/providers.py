@@ -14,12 +14,68 @@ import httpx
 
 from app.ai.base import AiRequest, AiResult
 from app.ai.parsing import AiResponseError, parse_ai_result
-from app.ai.prompts import SYSTEM_PROMPT, build_user_content
+from app.ai.prompts import SYSTEM_PROMPT, build_cursor_user_content, build_user_content
 from app.core.config import Settings
 
 logger = logging.getLogger("drivetest.ai.providers")
 
 _TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+
+
+_TRANSIENT_CLI_MARKERS = (
+    "connection lost",
+    "reconnecting",
+    "connection reset",
+    "econnreset",
+    "etimedout",
+    "timed out",
+    "network error",
+    "temporarily unavailable",
+    "socket hang up",
+)
+
+
+def _is_transient_cli_error(stderr: str) -> bool:
+    """True if the cursor-agent stderr looks like a transient network/streaming drop."""
+    low = (stderr or "").lower()
+    return any(marker in low for marker in _TRANSIENT_CLI_MARKERS)
+
+
+def _safe_log_filename(name: str) -> str:
+    """Map a log key (e.g. 'ssh_session', 'result.json') to a safe file name.
+
+    Keeps a recognizable name, strips path separators / unusual characters, and
+    ensures there is an extension so the attachment reads as a plain text/JSON
+    file in the agent's workspace.
+    """
+    import re
+
+    base = re.sub(r"[^A-Za-z0-9._-]", "_", name.strip()) or "log"
+    if "." not in base:
+        base += ".txt"
+    return base
+
+
+def _write_log_files(workspace: str, files: dict[str, str]) -> list[str]:
+    """Write each independent log to a file in the workspace; return file names."""
+    from pathlib import Path
+
+    written: list[str] = []
+    used: set[str] = set()
+    for name, content in files.items():
+        filename = _safe_log_filename(name)
+        # Avoid collisions after sanitizing distinct keys to the same name.
+        candidate, i = filename, 1
+        while candidate in used:
+            stem, dot, ext = filename.partition(".")
+            candidate = f"{stem}_{i}{dot}{ext}"
+            i += 1
+        used.add(candidate)
+        (Path(workspace) / candidate).write_text(
+            content if isinstance(content, str) else str(content), encoding="utf-8"
+        )
+        written.append(candidate)
+    return written
 
 
 class _HttpEvaluatorBase:
@@ -116,8 +172,26 @@ class CursorEvaluator:
         if not self._settings.cursor_api_key:
             raise AiResponseError("No Cursor API key configured for this user.")
 
-        prompt = SYSTEM_PROMPT + "\n\n" + build_user_content(request)
-        cmd = [exe, "-p", "--force", "--mode", "ask", "--output-format", "text"]
+        # Attach the (potentially large) independent logs as files in a workspace
+        # the agent can read, instead of inlining them into the command-line
+        # argument. A big transcript inlined into argv overflows the OS ARG_MAX
+        # limit and fails with "[Errno 7] Argument list too long".
+        workspace = tempfile.mkdtemp(prefix="drivetest-ai-")
+        log_filenames = _write_log_files(workspace, request.files)
+
+        prompt = SYSTEM_PROMPT + "\n\n" + build_cursor_user_content(request, log_filenames)
+        cmd = [
+            exe,
+            "-p",
+            "--force",
+            "--trust",
+            "--mode",
+            "ask",
+            "--output-format",
+            "text",
+            "--workspace",
+            workspace,
+        ]
         if self._settings.cursor_model:
             cmd += ["--model", self._settings.cursor_model]
         cmd += [prompt]
@@ -131,7 +205,7 @@ class CursorEvaluator:
             try:
                 proc = subprocess.run(
                     cmd,
-                    cwd=tempfile.mkdtemp(prefix="drivetest-ai-"),
+                    cwd=workspace,
                     env=env,
                     capture_output=True,
                     text=True,
@@ -140,8 +214,24 @@ class CursorEvaluator:
             except subprocess.TimeoutExpired as exc:
                 raise AiResponseError(f"Cursor agent timed out after {timeout}s.") from exc
             if proc.returncode != 0:
+                stderr = (proc.stderr or "").strip()
+                # A dropped streaming session to the Cursor cloud (the CLI prints
+                # "Connection lost, reconnecting..." and exits non-zero) is a
+                # transient infrastructure failure, not a bad result. Retry the
+                # whole invocation with backoff before giving up.
+                if _is_transient_cli_error(stderr) and attempt < retries:
+                    delay = 2 ** attempt
+                    logger.warning(
+                        "ai_cli_transient attempt=%d model=cursor retry_in=%ss",
+                        attempt + 1, delay,
+                    )
+                    last_error = AiResponseError(
+                        f"Cursor agent exited {proc.returncode}: {stderr[:300]}"
+                    )
+                    time.sleep(delay)
+                    continue
                 raise AiResponseError(
-                    f"Cursor agent exited {proc.returncode}: {(proc.stderr or '').strip()[:300]}"
+                    f"Cursor agent exited {proc.returncode}: {stderr[:300]}"
                 )
             try:
                 return parse_ai_result(proc.stdout, request.test_verdict)

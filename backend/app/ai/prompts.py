@@ -81,3 +81,53 @@ def build_user_content(request: AiRequest) -> str:
         "test script's own result.json.\n\n"
         + json.dumps(payload, indent=2, default=str)
     )
+
+
+def build_cursor_user_content(request: AiRequest, log_filenames: list[str]) -> str:
+    """User prompt for the Cursor CLI when logs are attached as files on disk.
+
+    The bulky independent logs (device session transcript, stdout, stderr,
+    result.json) are written to files in the agent's workspace and read there via
+    its file tools, instead of being inlined into the command-line argument (which
+    overflows the OS ARG_MAX limit). Only the expected results (from evaluation.md)
+    plus a pointer to the attached files travel in the prompt.
+    """
+    payload = {
+        "test_id": request.test_id,
+        "expected_results": {
+            "description": request.description,
+            "expected_behavior": request.expected_behavior,
+            "evaluation_instructions": request.evaluation_instructions,
+        },
+        "safety_guard_only": {
+            "deterministic_test_verdict": request.test_verdict,
+            "note": (
+                "Provided only so you never return PASSED when this is FAILED. "
+                "This is NOT evidence; judge the logs yourself."
+            ),
+        },
+        "environment": {
+            "platform": request.platform,
+            "system_type": request.system_type,
+            "software_version": request.software_version,
+        },
+    }
+    if log_filenames:
+        files_block = "\n".join(f"- {name}" for name in log_filenames)
+        logs_intro = (
+            "The run's INDEPENDENT LOGS are attached as files in your current workspace "
+            "directory. Read each of them IN FULL with your file tools before judging:\n"
+            f"{files_block}\n\n"
+        )
+    else:
+        logs_intro = (
+            "No independent log files were captured for this run. If you cannot confirm the "
+            "expected behavior, return INCONCLUSIVE.\n\n"
+        )
+    return (
+        logs_intro
+        + "Compare what those logs actually show against the expected results below, then "
+        "return the JSON verdict object. Do not trust or restate the test script's own "
+        "result.json.\n\n"
+        + json.dumps(payload, indent=2, default=str)
+    )
